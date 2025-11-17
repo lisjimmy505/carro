@@ -44,17 +44,16 @@
 <script>
 const firebaseURL = "https://carro-f8554-default-rtdb.firebaseio.com/sensores.json";
 
-// BOTÓN LIMPIAR DATOS
 document.getElementById("clearBtn").onclick = () => {
     document.getElementById("tabla_co2").innerHTML = "";
     document.getElementById("tabla_co").innerHTML = "";
 };
 
-// Variables
+// Variables de control
 let lastCO2 = null;
 let lastCO = null;
 let lastESPUpdate = 0;
-let lastFirebaseTime = 0; // <-- Guardamos último last_update recibido
+let lastFirebaseTime = 0;
 
 function actualizar() {
     fetch(firebaseURL)
@@ -66,20 +65,21 @@ function actualizar() {
         const co = data.co;
         const last_update = Number(data.last_update) || 0;
 
-        // Actualizamos lastESPUpdate SOLO si last_update cambió
+        // Solo actualizar lastESPUpdate si llega un nuevo dato
         if (last_update !== lastFirebaseTime) {
             lastESPUpdate = Date.now();
             lastFirebaseTime = last_update;
         }
 
         // Actualizar valores solo si cambian >10%
-        if (lastCO2 === null || Math.abs((co2 - lastCO2) / lastCO2) > 0.10) {
+        if (lastCO2 === null || Math.abs((co2 - lastCO2)/lastCO2) > 0.1) {
             document.getElementById("co2_valor").innerText = co2 + " ppm";
             let row = "<tr><td>" + co2 + "</td></tr>";
             document.getElementById("tabla_co2").innerHTML = row + document.getElementById("tabla_co2").innerHTML;
             lastCO2 = co2;
         }
-        if (lastCO === null || Math.abs((co - lastCO) / lastCO) > 0.10) {
+
+        if (lastCO === null || Math.abs((co - lastCO)/lastCO) > 0.1) {
             document.getElementById("co_valor").innerText = co + " ppm";
             let row = "<tr><td>" + co + "</td></tr>";
             document.getElementById("tabla_co").innerHTML = row + document.getElementById("tabla_co").innerHTML;
@@ -89,12 +89,10 @@ function actualizar() {
     .catch(err => console.log("Error al leer Firebase:", err));
 }
 
-// Función para verificar conexión real
 function checkConnection() {
     const ahora = Date.now();
     const diff = ahora - lastESPUpdate;
-
-    if (diff < 5000) { // Conectado si recibimos datos en últimos 5 segundos
+    if (diff < 5000) { // Conectado si hay dato en los últimos 5 s
         document.getElementById("status").innerHTML = "ESP32 Conectado ✓";
         document.getElementById("status").className = "status-box ok";
     } else {
@@ -103,7 +101,7 @@ function checkConnection() {
     }
 }
 
-// Auto-refresh
+// Ejecutar inicialización
 actualizar();
 setInterval(actualizar, 2000);
 setInterval(checkConnection, 1000);
