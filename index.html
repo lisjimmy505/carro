@@ -1,116 +1,127 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Monitor de Sensores</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sensores MQ – Monitor</title>
 
-    <style>
-        body {
-            background-color: #4c0ead;
-            color: white;
-            font-family: "Times New Roman", serif;
-            text-align: center;
-            margin: 0;
-            padding: 0;
-        }
+<style>
+    body {
+        background-color: #4b0082;
+        color: white;
+        font-family: "Times New Roman", serif;
+        text-align: center;
+        margin: 0;
+        padding: 20px;
+    }
 
-        .header {
-            position: relative;
-            padding: 20px;
-            font-size: 28px;
-            font-weight: bold;
-        }
+    h1 {
+        font-size: 32px;
+        margin-bottom: 5px;
+    }
 
-        .logo-left, .logo-right {
-            position: absolute;
-            top: 10px;
-            width: 80px;
-            height: 80px;
-        }
+    #status {
+        font-size: 18px;
+        padding: 10px;
+        margin-bottom: 20px;
+        border-radius: 8px;
+        display: inline-block;
+    }
 
-        .logo-left {
-            left: 10px;
-        }
+    .ok { background-color: #2ecc71; }
+    .fail { background-color: #e74c3c; }
 
-        .logo-right {
-            right: 10px;
-        }
+    .sensorBox {
+        width: 40%;
+        display: inline-block;
+        background: rgba(255,255,255,0.1);
+        padding: 20px;
+        margin: 10px;
+        border-radius: 12px;
+    }
 
-        .container {
-            display: flex;
-            justify-content: center;
-            margin-top: 30px;
-            width: 100%;
-        }
+    .sensorValue {
+        font-size: 28px;
+        margin-top: 10px;
+    }
 
-        .column {
-            width: 45%;
-            margin: 15px;
-            padding: 20px;
-            background-color: #ffffff22;
-            border-radius: 12px;
-        }
+    table {
+        width: 90%;
+        margin: auto;
+        border-collapse: collapse;
+        margin-top: 15px;
+    }
 
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 15px;
-            background-color: #ffffff11;
-        }
+    th, td {
+        border: 1px solid white;
+        padding: 8px;
+    }
 
-        th, td {
-            padding: 10px;
-            border: 1px solid #ddd;
-            color: white;
-        }
+    .logos {
+        position: absolute;
+        top: 10px;
+        width: 120px;
+    }
 
-        img {
-            width: 120px;
-            margin-top: 10px;
-        }
-    </style>
+    #logo1 { left: 10px; }
+    #logo2 { right: 10px; }
+</style>
 </head>
 <body>
 
-    <!-- Logos -->
-    <div class="header">
-        <img class="logo-left" src="https://raw.githubusercontent.com/lisjimmy505/carro/main/logo.png">
-        <img class="logo-right" src="https://raw.githubusercontent.com/lisjimmy505/carro/main/carro.png">
-        Monitor de Sensores CO & CO₂
-        <div style="font-size: 14px; margin-top: 5px;">Página funcionando sin ESP32</div>
-    </div>
+<!-- Logos en las esquinas -->
+<img id="logo1" class="logos" src="https://raw.githubusercontent.com/lisjimmy505/carro/main/logo.png">
+<img id="logo2" class="logos" src="https://raw.githubusercontent.com/lisjimmy505/carro/main/carro.png">
 
-    <!-- Contenido principal -->
-    <div class="container">
+<h1>Monitor de Gases MQ</h1>
 
-        <!-- Sensor CO -->
-        <div class="column">
-            <h2>Sensor CO</h2>
-            <p id="coValue">—</p>
+<div id="status" class="fail">SIN CONEXIÓN</div>
 
-            <table>
-                <tr><th>Historial de CO</th></tr>
-                <tbody id="coTable">
-                    <tr><td>Esperando datos…</td></tr>
-                </tbody>
-            </table>
-        </div>
+<div class="sensorBox">
+    <h2>MQ135 (CO₂)</h2>
+    <div id="co2_value" class="sensorValue">---</div>
+    <table id="tabla_co2">
+        <tr><th>Lecturas CO₂ (ppm)</th></tr>
+    </table>
+</div>
 
-        <!-- Sensor CO₂ -->
-        <div class="column">
-            <h2>Sensor CO₂</h2>
-            <p id="co2Value">—</p>
+<div class="sensorBox">
+    <h2>MQ9 (CO)</h2>
+    <div id="co_value" class="sensorValue">---</div>
+    <table id="tabla_co">
+        <tr><th>Lecturas CO (ppm)</th></tr>
+    </table>
+</div>
 
-            <table>
-                <tr><th>Historial de CO₂</th></tr>
-                <tbody id="co2Table">
-                    <tr><td>Esperando datos…</td></tr>
-                </tbody>
-            </table>
-        </div>
+<script>
+//------------------------------------
+// AUTOMÁTICA CADA 2 SEGUNDOS
+//------------------------------------
+setInterval(() => {
+    fetch("http://192.168.100.55/data.json")
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById("status").innerHTML = "ESP32 CONECTADO";
+            document.getElementById("status").className = "ok";
 
-    </div>
+            // Mostrar valores
+            document.getElementById("co2_value").innerHTML = data.co2 + " ppm";
+            document.getElementById("co_value").innerHTML = data.co + " ppm";
+
+            // Agregar fila a tabla CO2
+            let fila1 = "<tr><td>" + data.co2 + "</td></tr>";
+            document.getElementById("tabla_co2").innerHTML += fila1;
+
+            // Agregar fila a tabla CO
+            let fila2 = "<tr><td>" + data.co + "</td></tr>";
+            document.getElementById("tabla_co").innerHTML += fila2;
+        })
+        .catch(error => {
+            document.getElementById("status").innerHTML = "SIN CONEXIÓN";
+            document.getElementById("status").className = "fail";
+        });
+}, 2000);
+</script>
 
 </body>
 </html>
