@@ -22,9 +22,9 @@ table td { padding: 2px; border-bottom: 1px solid rgba(255,255,255,0.12); }
 button { margin-top: 15px; padding: 8px 20px; font-size: 16px; border: none; border-radius: 8px; cursor: pointer; }
 #startBtn { background: #FFDD33; }
 #stopBtn { background: #FF4C4C; color: black; }
-.charts-container { display: flex; justify-content: center; gap: 20px; margin-top: 20px; flex-wrap: wrap; }
-.chart-card { background: rgba(255, 255, 255, 0.1); padding: 10px; width: 250px; border-radius: 12px; }
-canvas { width: 100% !important; height: 180px !important; } /* pequeña altura */
+.chart-row { display: flex; justify-content: center; gap: 20px; margin-top: 20px; flex-wrap: wrap; }
+.chart-card { background: rgba(255, 255, 255, 0.1); padding: 10px; width: 280px; border-radius: 12px; }
+canvas { width: 100% !important; height: 200px !important; } /* un poco más grande */
 </style>
 </head>
 <body>
@@ -49,15 +49,14 @@ canvas { width: 100% !important; height: 180px !important; } /* pequeña altura 
     </div>
 </div>
 
-<!-- Gráficas de cada sensor -->
-<div class="charts-container">
+<div class="chart-row">
     <div class="chart-card">
         <h2>Gráfica CO₂</h2>
-        <canvas id="chart_co2"></canvas>
+        <canvas id="chartCO2"></canvas>
     </div>
     <div class="chart-card">
         <h2>Gráfica CO</h2>
-        <canvas id="chart_co"></canvas>
+        <canvas id="chartCO"></canvas>
     </div>
 </div>
 
@@ -72,22 +71,22 @@ let lastFirebaseTime = 0;
 let collecting = false;
 let historyData = [];
 
-// Chart.js setup (inicialmente vacío)
-let ctxCO2 = document.getElementById('chart_co2').getContext('2d');
-let ctxCO = document.getElementById('chart_co').getContext('2d');
+// Chart.js setup
+let ctxCO2 = document.getElementById('chartCO2').getContext('2d');
+let ctxCO = document.getElementById('chartCO').getContext('2d');
 let chartCO2 = null;
 let chartCO = null;
 
 document.getElementById("startBtn").onclick = () => {
     collecting = true;
-    historyData = []; // Limpiar histórico al iniciar
+    historyData = []; // limpiar histórico
     if(chartCO2) { chartCO2.destroy(); chartCO2 = null; }
     if(chartCO) { chartCO.destroy(); chartCO = null; }
 };
 
 document.getElementById("stopBtn").onclick = () => {
     collecting = false;
-    drawCharts(); // dibuja gráficas al detener
+    drawCharts();
 };
 
 function actualizar() {
@@ -153,7 +152,7 @@ function drawCharts() {
             plugins: { legend: { labels: { color: 'white' } } },
             scales: {
                 x: { ticks: { color: 'white' } },
-                y: { ticks: { color: 'white' } }
+                y: { min: 0, max: 5000, ticks: { color: 'white' } } // Ajustar máximo según tu sensor
             }
         }
     });
@@ -172,7 +171,7 @@ function drawCharts() {
             plugins: { legend: { labels: { color: 'white' } } },
             scales: {
                 x: { ticks: { color: 'white' } },
-                y: { ticks: { color: 'white' } }
+                y: { min: 0, max: 1000, ticks: { color: 'white' } } // Ajustar máximo según tu sensor
             }
         }
     });
