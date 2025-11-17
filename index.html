@@ -16,12 +16,14 @@ h1 { font-size: 32px; margin-top: 20px; }
 .ok { background: #25D366; color: black; }
 .fail { background: #FF4C4C; color: black; }
 .two-columns { display: flex; justify-content: center; gap: 20px; margin-top: 20px; flex-wrap: wrap; }
-.card, .chart-card { background: rgba(255, 255, 255, 0.1); padding: 15px; width: 250px; border-radius: 12px; }
+.card { background: rgba(255, 255, 255, 0.1); padding: 15px; width: 250px; border-radius: 12px; }
 table { width: 100%; border-collapse: collapse; font-size: 14px; }
 table td { padding: 2px; border-bottom: 1px solid rgba(255,255,255,0.12); }
 button { margin-top: 15px; padding: 8px 20px; font-size: 16px; border: none; border-radius: 8px; cursor: pointer; }
 #startBtn { background: #FFDD33; }
 #stopBtn { background: #FF4C4C; color: black; }
+.charts-container { display: flex; justify-content: center; gap: 20px; margin-top: 20px; flex-wrap: wrap; }
+.chart-card { background: rgba(255, 255, 255, 0.1); padding: 10px; width: 250px; border-radius: 12px; }
 canvas { width: 100% !important; height: 180px !important; } /* pequeña altura */
 </style>
 </head>
@@ -45,6 +47,10 @@ canvas { width: 100% !important; height: 180px !important; } /* pequeña altura 
         <h3 id="co_valor">---</h3>
         <table id="tabla_co"></table>
     </div>
+</div>
+
+<!-- Gráficas de cada sensor -->
+<div class="charts-container">
     <div class="chart-card">
         <h2>Gráfica CO₂</h2>
         <canvas id="chart_co2"></canvas>
@@ -64,8 +70,7 @@ let lastCO = null;
 let lastESPUpdate = 0;
 let lastFirebaseTime = 0;
 let collecting = false;
-let historyCO2 = [];
-let historyCO = [];
+let historyData = [];
 
 // Chart.js setup (inicialmente vacío)
 let ctxCO2 = document.getElementById('chart_co2').getContext('2d');
@@ -75,15 +80,14 @@ let chartCO = null;
 
 document.getElementById("startBtn").onclick = () => {
     collecting = true;
-    historyCO2 = [];
-    historyCO = [];
+    historyData = []; // Limpiar histórico al iniciar
     if(chartCO2) { chartCO2.destroy(); chartCO2 = null; }
     if(chartCO) { chartCO.destroy(); chartCO = null; }
 };
 
 document.getElementById("stopBtn").onclick = () => {
     collecting = false;
-    drawCharts();
+    drawCharts(); // dibuja gráficas al detener
 };
 
 function actualizar() {
@@ -113,8 +117,7 @@ function actualizar() {
 
         if (collecting) {
             const timestamp = new Date().toLocaleTimeString();
-            historyCO2.push({time: timestamp, value: co2});
-            historyCO.push({time: timestamp, value: co});
+            historyData.push({time: timestamp, co2: co2, co: co});
         }
     })
     .catch(err => console.log("Error al leer Firebase:", err));
@@ -133,14 +136,15 @@ function checkConnection() {
 }
 
 function drawCharts() {
-    // Gráfica CO2
     if(chartCO2) chartCO2.destroy();
+    if(chartCO) chartCO.destroy();
+
     chartCO2 = new Chart(ctxCO2, {
         type: 'line',
         data: {
-            labels: historyCO2.map(d => d.time),
+            labels: historyData.map(d => d.time),
             datasets: [
-                { label: 'CO2 (ppm)', data: historyCO2.map(d => d.value), borderColor: 'lime', fill: false, tension: 0.1 }
+                { label: 'CO2 (ppm)', data: historyData.map(d => d.co2), borderColor: 'lime', fill: false, tension: 0.1 }
             ]
         },
         options: {
@@ -154,14 +158,12 @@ function drawCharts() {
         }
     });
 
-    // Gráfica CO
-    if(chartCO) chartCO.destroy();
     chartCO = new Chart(ctxCO, {
         type: 'line',
         data: {
-            labels: historyCO.map(d => d.time),
+            labels: historyData.map(d => d.time),
             datasets: [
-                { label: 'CO (ppm)', data: historyCO.map(d => d.value), borderColor: 'yellow', fill: false, tension: 0.1 }
+                { label: 'CO (ppm)', data: historyData.map(d => d.co), borderColor: 'yellow', fill: false, tension: 0.1 }
             ]
         },
         options: {
