@@ -118,13 +118,14 @@ function actualizar() {
         let ahora = Date.now();
         let diff = Math.abs(ahora - last_update);
 
-        if (diff < 15000) {
-            document.getElementById("status").innerHTML = "ESP32 Conectado ✓";
-            document.getElementById("status").className = "status-box ok";
-        } else {
-            document.getElementById("status").innerHTML = "ESP32 Desconectado ✗";
-            document.getElementById("status").className = "status-box fail";
-        }
+        if (diff < 30000) { // 30 segundos
+    document.getElementById("status").innerHTML = "ESP32 Conectado ✓";
+    document.getElementById("status").className = "status-box ok";
+} else {
+    document.getElementById("status").innerHTML = "ESP32 Desconectado ✗";
+    document.getElementById("status").className = "status-box fail";
+}
+
 
         // --- ACTUALIZAR SOLO SI CAMBIA MÁS DE 10% ---
         if (lastCO2 === null || Math.abs((co2 - lastCO2) / lastCO2) > 0.10) {
@@ -150,5 +151,6 @@ setInterval(actualizar, 5000);
 
 </body>
 </html>
+
 
 
