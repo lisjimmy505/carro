@@ -11,18 +11,18 @@
         color: white;
         text-align: center;
     }
-    h1 { font-size: 40px; margin-top: 20px; }
-    .status-box { display: inline-block; padding: 10px 20px; border-radius: 12px; font-size: 20px; margin: 20px; }
+    h1 { font-size: 32px; margin-top: 20px; }
+    .status-box { display: inline-block; padding: 8px 16px; border-radius: 12px; font-size: 18px; margin: 10px; }
     .ok { background: #25D366; color: black; }
     .fail { background: #FF4C4C; color: black; }
-    .two-columns { display: flex; justify-content: center; gap: 60px; margin-top: 20px; flex-wrap: wrap; }
-    .card { background: rgba(255, 255, 255, 0.1); padding: 20px; width: 330px; border-radius: 15px; }
-    table { width: 100%; border-collapse: collapse; font-size: 17px; }
-    table td { padding: 4px; border-bottom: 1px solid rgba(255,255,255,0.12); }
-    button { margin-top: 20px; padding: 10px 30px; font-size: 18px; border: none; border-radius: 10px; cursor: pointer; }
+    .two-columns { display: flex; justify-content: center; gap: 30px; margin-top: 20px; flex-wrap: wrap; }
+    .card { background: rgba(255, 255, 255, 0.1); padding: 15px; width: 250px; border-radius: 12px; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    table td { padding: 2px; border-bottom: 1px solid rgba(255,255,255,0.12); }
+    button { margin-top: 15px; padding: 8px 20px; font-size: 16px; border: none; border-radius: 8px; cursor: pointer; }
     #startBtn { background: #FFDD33; }
     #stopBtn { background: #FF4C4C; color: black; }
-    canvas { background: rgba(255,255,255,0.1); border-radius: 10px; margin-top: 20px; }
+    #chart-container { width: 400px; height: 200px; margin: 20px auto; }
 </style>
 </head>
 <body>
@@ -47,7 +47,9 @@
     </div>
 </div>
 
-<canvas id="chart" width="800" height="400"></canvas>
+<div id="chart-container">
+    <canvas id="chart"></canvas>
+</div>
 
 <script>
 const firebaseURL = "https://carro-f8554-default-rtdb.firebaseio.com/sensores.json";
@@ -57,28 +59,24 @@ let lastCO2 = null;
 let lastCO = null;
 let lastESPUpdate = 0;
 let lastFirebaseTime = 0;
-let collecting = false; // si se está recopilando
-let historyData = []; // datos históricos para el gráfico
+let collecting = false;
+let historyData = [];
 
-// Chart.js setup
-const ctx = document.getElementById('chart').getContext('2d');
-const chart = new Chart(ctx, {
-    type: 'line',
-    data: {
-        labels: [],
-        datasets: [
-            { label: 'CO2 (ppm)', data: [], borderColor: 'lime', fill: false },
-            { label: 'CO (ppm)', data: [], borderColor: 'yellow', fill: false }
-        ]
-    },
-    options: { responsive: true, maintainAspectRatio: false }
-});
+// Chart.js setup (inicialmente vacío)
+let ctx = document.getElementById('chart').getContext('2d');
+let chart = null;
 
-// BOTONES
-document.getElementById("startBtn").onclick = () => { collecting = true; };
-document.getElementById("stopBtn").onclick = () => { collecting = false; updateChart(); };
+document.getElementById("startBtn").onclick = () => {
+    collecting = true;
+    historyData = []; // Limpiar histórico al iniciar
+    if(chart) { chart.destroy(); chart = null; } // Borrar gráfica anterior
+};
 
-// FUNCIONES
+document.getElementById("stopBtn").onclick = () => {
+    collecting = false;
+    drawChart(); // dibuja gráfica al detener
+};
+
 function actualizar() {
     fetch(firebaseURL)
     .then(res => res.json())
@@ -89,23 +87,21 @@ function actualizar() {
         const co = data.co;
         const last_update = Number(data.last_update) || 0;
 
-        // Solo actualizar lastESPUpdate si llega un nuevo dato
         if (last_update !== lastFirebaseTime) {
             lastESPUpdate = Date.now();
             lastFirebaseTime = last_update;
         }
 
-        // Mostrar valores actuales
         if (lastCO2 === null || Math.abs((co2 - lastCO2)/lastCO2) > 0.1) {
             document.getElementById("co2_valor").innerText = co2 + " ppm";
             lastCO2 = co2;
         }
+
         if (lastCO === null || Math.abs((co - lastCO)/lastCO) > 0.1) {
             document.getElementById("co_valor").innerText = co + " ppm";
             lastCO = co;
         }
 
-        // Guardar en histórico si está en modo recopilación
         if (collecting) {
             const timestamp = new Date().toLocaleTimeString();
             historyData.push({time: timestamp, co2: co2, co: co});
@@ -126,15 +122,30 @@ function checkConnection() {
     }
 }
 
-// Actualizar gráfico con datos históricos
-function updateChart() {
-    chart.data.labels = historyData.map(d => d.time);
-    chart.data.datasets[0].data = historyData.map(d => d.co2);
-    chart.data.datasets[1].data = historyData.map(d => d.co);
-    chart.update();
+function drawChart() {
+    if(chart) chart.destroy(); // eliminar gráfica anterior
+    chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: historyData.map(d => d.time),
+            datasets: [
+                { label: 'CO2 (ppm)', data: historyData.map(d => d.co2), borderColor: 'lime', fill: false, tension: 0.1 },
+                { label: 'CO (ppm)', data: historyData.map(d => d.co), borderColor: 'yellow', fill: false, tension: 0.1 }
+            ]
+        },
+        options: {
+            responsive: false,
+            maintainAspectRatio: false,
+            plugins: { legend: { labels: { color: 'white' } } },
+            scales: {
+                x: { ticks: { color: 'white' } },
+                y: { ticks: { color: 'white' } }
+            }
+        }
+    });
 }
 
-// AUTO REFRESH
+// Auto refresh
 actualizar();
 setInterval(actualizar, 2000);
 setInterval(checkConnection, 1000);
