@@ -94,34 +94,31 @@
 </div>
 
 <script>
-//------------------------------------
-// AUTOMÁTICA CADA 2 SEGUNDOS
-//------------------------------------
 setInterval(() => {
-    fetch("http://192.168.100.55/data.json")
-        .then(response => response.json())
-        .then(data => {
-            document.getElementById("status").innerHTML = "ESP32 CONECTADO";
-            document.getElementById("status").className = "ok";
+    fetch("https://carro-f8554-default-rtdb.firebaseio.com/sensores.json")
+    .then(res => res.json())
+    .then(data => {
+        if (!data) return;
 
-            // Mostrar valores
-            document.getElementById("co2_value").innerHTML = data.co2 + " ppm";
-            document.getElementById("co_value").innerHTML = data.co + " ppm";
+        document.getElementById("status").innerHTML = "Conectado a Firebase ✓";
+        document.getElementById("status").className = "ok";
 
-            // Agregar fila a tabla CO2
-            let fila1 = "<tr><td>" + data.co2 + "</td></tr>";
-            document.getElementById("tabla_co2").innerHTML += fila1;
+        document.getElementById("co2_value").innerHTML = data.co2 + " ppm";
+        document.getElementById("co_value").innerHTML = data.co + " ppm";
 
-            // Agregar fila a tabla CO
-            let fila2 = "<tr><td>" + data.co + "</td></tr>";
-            document.getElementById("tabla_co").innerHTML += fila2;
-        })
-        .catch(error => {
-            document.getElementById("status").innerHTML = "SIN CONEXIÓN";
-            document.getElementById("status").className = "fail";
-        });
+        let fila1 = "<tr><td>" + data.co2 + "</td></tr>";
+        document.getElementById("tabla_co2").innerHTML += fila1;
+
+        let fila2 = "<tr><td>" + data.co + "</td></tr>";
+        document.getElementById("tabla_co").innerHTML += fila2;
+    })
+    .catch(err => {
+        document.getElementById("status").innerHTML = "SIN CONEXIÓN";
+        document.getElementById("status").className = "fail";
+    });
 }, 2000);
 </script>
 
 </body>
 </html>
+
