@@ -1,134 +1,116 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<meta http-equiv="refresh" content="5"> <!-- Refresca cada 5s -->
-<title>Dashboard Gases ESP32</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitor de Sensores</title>
 
-<style>
-    body {
-        background-color: #4B0082; /* Morado */
-        color: white;
-        font-family: "Times New Roman", serif;
-        margin: 0;
-        padding: 20px;
-    }
+    <style>
+        body {
+            background-color: #4c0ead;
+            color: white;
+            font-family: "Times New Roman", serif;
+            text-align: center;
+            margin: 0;
+            padding: 0;
+        }
 
-    h1, h2, h3 {
-        text-align: center;
-    }
+        .header {
+            position: relative;
+            padding: 20px;
+            font-size: 28px;
+            font-weight: bold;
+        }
 
-    .status {
-        text-align: center;
-        font-size: 22px;
-        font-weight: bold;
-        margin-bottom: 20px;
-    }
+        .logo-left, .logo-right {
+            position: absolute;
+            top: 10px;
+            width: 80px;
+            height: 80px;
+        }
 
-    .container {
-        display: flex;
-        justify-content: space-between;
-        width: 100%;
-    }
+        .logo-left {
+            left: 10px;
+        }
 
-    table {
-        background: rgba(255,255,255,0.15);
-        padding: 10px;
-        border-radius: 12px;
-        width: 45%;
-    }
+        .logo-right {
+            right: 10px;
+        }
 
-    table td {
-        padding: 6px;
-        border-bottom: 1px solid rgba(255,255,255,0.3);
-    }
+        .container {
+            display: flex;
+            justify-content: center;
+            margin-top: 30px;
+            width: 100%;
+        }
 
-    .corner-img {
-        position: absolute;
-        width: 90px;
-        opacity: 0.9;
-    }
+        .column {
+            width: 45%;
+            margin: 15px;
+            padding: 20px;
+            background-color: #ffffff22;
+            border-radius: 12px;
+        }
 
-    #logo_tl { top: 10px; left: 10px; }
-    #logo_tr { top: 10px; right: 10px; }
-    #logo_bl { bottom: 10px; left: 10px; }
-    #logo_br { bottom: 10px; right: 10px; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+            background-color: #ffffff11;
+        }
 
-</style>
+        th, td {
+            padding: 10px;
+            border: 1px solid #ddd;
+            color: white;
+        }
 
-<script>
-// IP fija del ESP32
-const espIP = "http://192.168.100.55/data";
-
-// Variables para cambio ≥10%
-let lastCO2 = null;
-let lastCO  = null;
-
-async function getData() {
-    let statusField = document.getElementById("status");
-
-    try {
-        const response = await fetch(espIP, { method: "GET", mode: "cors" });
-
-        if (!response.ok) throw new Error("Error");
-
-        const data = await response.json();
-
-        statusField.innerHTML = "🟢 ESP32 Conectado";
-
-        updateIfChanged("co2_table", "CO2", data.co2, "lastCO2");
-        updateIfChanged("co_table", "CO", data.co, "lastCO");
-
-    } catch (e) {
-        statusField.innerHTML = "🔴 ESP32 Desconectado";
-    }
-}
-
-function updateIfChanged(tableID, label, newValue, varName) {
-    let last = window[varName];
-
-    if (last === null || Math.abs(newValue - last) >= last * 0.10) {
-        window[varName] = newValue;
-
-        let table = document.getElementById(tableID);
-        let row = table.insertRow(-1);
-
-        let c1 = row.insertCell(0);
-        let c2 = row.insertCell(1);
-
-        c1.innerHTML = label;
-        c2.innerHTML = newValue + " ppm";
-    }
-}
-
-setInterval(getData, 3000);
-</script>
-
+        img {
+            width: 120px;
+            margin-top: 10px;
+        }
+    </style>
 </head>
 <body>
 
-<!-- LOGOS EN ESQUINAS -->
-<img id="logo_tl" class="corner-img" src="https://raw.githubusercontent.com/lisjimmy505/carro/main/logo.png">
-<img id="logo_tr" class="corner-img" src="https://raw.githubusercontent.com/lisjimmy505/carro/main/carro.png">
-<img id="logo_bl" class="corner-img" src="https://raw.githubusercontent.com/lisjimmy505/carro/main/logo.png">
-<img id="logo_br" class="corner-img" src="https://raw.githubusercontent.com/lisjimmy505/carro/main/carro.png">
+    <!-- Logos -->
+    <div class="header">
+        <img class="logo-left" src="https://raw.githubusercontent.com/lisjimmy505/carro/main/logo.png">
+        <img class="logo-right" src="https://raw.githubusercontent.com/lisjimmy505/carro/main/carro.png">
+        Monitor de Sensores CO & CO₂
+        <div style="font-size: 14px; margin-top: 5px;">Página funcionando sin ESP32</div>
+    </div>
 
-<h1>Panel de Monitoreo de Gases</h1>
-<div id="status" class="status">Verificando conexión...</div>
+    <!-- Contenido principal -->
+    <div class="container">
 
-<div class="container">
-    
-    <!-- TABLA CO2 -->
-    <table id="co2_table">
-        <tr><th colspan="2">Sensor MQ-135 (CO₂)</th></tr>
-    </table>
+        <!-- Sensor CO -->
+        <div class="column">
+            <h2>Sensor CO</h2>
+            <p id="coValue">—</p>
 
-    <!-- TABLA CO -->
-    <table id="co_table">
-        <tr><th colspan="2">Sensor MQ-9 (CO)</th></tr>
-    </table>
+            <table>
+                <tr><th>Historial de CO</th></tr>
+                <tbody id="coTable">
+                    <tr><td>Esperando datos…</td></tr>
+                </tbody>
+            </table>
+        </div>
 
-</div>
+        <!-- Sensor CO₂ -->
+        <div class="column">
+            <h2>Sensor CO₂</h2>
+            <p id="co2Value">—</p>
+
+            <table>
+                <tr><th>Historial de CO₂</th></tr>
+                <tbody id="co2Table">
+                    <tr><td>Esperando datos…</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+    </div>
 
 </body>
 </html>
