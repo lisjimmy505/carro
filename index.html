@@ -124,13 +124,18 @@ setInterval(() => {
         if (!data) return;
 
         // Estado ESP32
-        if (data.estado === true) {
-            document.getElementById("status").innerHTML = "ESP32 Conectado ✓";
-            document.getElementById("status").className = "ok";
-        } else {
-            document.getElementById("status").innerHTML = "ESP32 Desconectado ✗";
-            document.getElementById("status").className = "fail";
-        }
+       // Calcular si el ESP32 sigue conectado
+let ahora = Date.now();
+let diff = Math.abs(ahora - data.last_update);
+
+if (diff < 15000) { // menos de 15s
+    document.getElementById("status").innerHTML = "ESP32 Conectado ✓";
+    document.getElementById("status").className = "ok";
+} else {
+    document.getElementById("status").innerHTML = "ESP32 Desconectado ✗";
+    document.getElementById("status").className = "fail";
+}
+
 
         // Actualizar valores principales
         document.getElementById("co2_value").innerHTML = data.co2 + " ppm";
@@ -159,3 +164,4 @@ setInterval(() => {
 
 </body>
 </html>
+
