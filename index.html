@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <title>Monitor de Gases MQ</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
     body {
         font-family: "Times New Roman", serif;
@@ -18,7 +19,10 @@
     .card { background: rgba(255, 255, 255, 0.1); padding: 20px; width: 330px; border-radius: 15px; }
     table { width: 100%; border-collapse: collapse; font-size: 17px; }
     table td { padding: 4px; border-bottom: 1px solid rgba(255,255,255,0.12); }
-    #clearBtn { margin-top: 25px; padding: 10px 30px; font-size: 20px; border: none; background: #FFDD33; border-radius: 10px; cursor: pointer; }
+    button { margin-top: 20px; padding: 10px 30px; font-size: 18px; border: none; border-radius: 10px; cursor: pointer; }
+    #startBtn { background: #FFDD33; }
+    #stopBtn { background: #FF4C4C; color: black; }
+    canvas { background: rgba(255,255,255,0.1); border-radius: 10px; margin-top: 20px; }
 </style>
 </head>
 <body>
@@ -26,7 +30,9 @@
 <h1>Monitor de Gases MQ</h1>
 
 <div id="status" class="status-box fail">ESP32 Desconectado ✗</div>
-<button id="clearBtn">Borrar Datos</button>
+
+<button id="startBtn">Iniciar recopilación</button>
+<button id="stopBtn">Detener recopilación</button>
 
 <div class="two-columns">
     <div class="card">
@@ -41,20 +47,38 @@
     </div>
 </div>
 
+<canvas id="chart" width="800" height="400"></canvas>
+
 <script>
 const firebaseURL = "https://carro-f8554-default-rtdb.firebaseio.com/sensores.json";
-
-document.getElementById("clearBtn").onclick = () => {
-    document.getElementById("tabla_co2").innerHTML = "";
-    document.getElementById("tabla_co").innerHTML = "";
-};
 
 // Variables de control
 let lastCO2 = null;
 let lastCO = null;
 let lastESPUpdate = 0;
 let lastFirebaseTime = 0;
+let collecting = false; // si se está recopilando
+let historyData = []; // datos históricos para el gráfico
 
+// Chart.js setup
+const ctx = document.getElementById('chart').getContext('2d');
+const chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+        labels: [],
+        datasets: [
+            { label: 'CO2 (ppm)', data: [], borderColor: 'lime', fill: false },
+            { label: 'CO (ppm)', data: [], borderColor: 'yellow', fill: false }
+        ]
+    },
+    options: { responsive: true, maintainAspectRatio: false }
+});
+
+// BOTONES
+document.getElementById("startBtn").onclick = () => { collecting = true; };
+document.getElementById("stopBtn").onclick = () => { collecting = false; updateChart(); };
+
+// FUNCIONES
 function actualizar() {
     fetch(firebaseURL)
     .then(res => res.json())
@@ -71,19 +95,20 @@ function actualizar() {
             lastFirebaseTime = last_update;
         }
 
-        // Actualizar valores solo si cambian >10%
+        // Mostrar valores actuales
         if (lastCO2 === null || Math.abs((co2 - lastCO2)/lastCO2) > 0.1) {
             document.getElementById("co2_valor").innerText = co2 + " ppm";
-            let row = "<tr><td>" + co2 + "</td></tr>";
-            document.getElementById("tabla_co2").innerHTML = row + document.getElementById("tabla_co2").innerHTML;
             lastCO2 = co2;
         }
-
         if (lastCO === null || Math.abs((co - lastCO)/lastCO) > 0.1) {
             document.getElementById("co_valor").innerText = co + " ppm";
-            let row = "<tr><td>" + co + "</td></tr>";
-            document.getElementById("tabla_co").innerHTML = row + document.getElementById("tabla_co").innerHTML;
             lastCO = co;
+        }
+
+        // Guardar en histórico si está en modo recopilación
+        if (collecting) {
+            const timestamp = new Date().toLocaleTimeString();
+            historyData.push({time: timestamp, co2: co2, co: co});
         }
     })
     .catch(err => console.log("Error al leer Firebase:", err));
@@ -92,7 +117,7 @@ function actualizar() {
 function checkConnection() {
     const ahora = Date.now();
     const diff = ahora - lastESPUpdate;
-    if (diff < 5000) { // Conectado si hay dato en los últimos 5 s
+    if (diff < 5000) {
         document.getElementById("status").innerHTML = "ESP32 Conectado ✓";
         document.getElementById("status").className = "status-box ok";
     } else {
@@ -101,7 +126,15 @@ function checkConnection() {
     }
 }
 
-// Ejecutar inicialización
+// Actualizar gráfico con datos históricos
+function updateChart() {
+    chart.data.labels = historyData.map(d => d.time);
+    chart.data.datasets[0].data = historyData.map(d => d.co2);
+    chart.data.datasets[1].data = historyData.map(d => d.co);
+    chart.update();
+}
+
+// AUTO REFRESH
 actualizar();
 setInterval(actualizar, 2000);
 setInterval(checkConnection, 1000);
