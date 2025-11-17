@@ -27,7 +27,6 @@
     .ok { background: #25D366; color: black; }
     .fail { background: #FF4C4C; color: black; }
 
-    /* CONTENEDOR DE LAS DOS TABLAS */
     .two-columns {
         display: flex;
         justify-content: center;
@@ -39,7 +38,7 @@
     .card {
         background: rgba(255, 255, 255, 0.1);
         padding: 20px;
-        width: 330px;  /* ← TABLAS MÁS DELGADAS */
+        width: 330px;
         border-radius: 15px;
     }
 
@@ -51,7 +50,7 @@
 
     table td {
         padding: 4px;
-        border-bottom: 1px solid rgba(255,255,255,0.12); /* líneas casi invisibles */
+        border-bottom: 1px solid rgba(255,255,255,0.12);
     }
 
     #clearBtn {
@@ -76,14 +75,12 @@
 <button id="clearBtn">Borrar Datos</button>
 
 <div class="two-columns">
-    <!-- TARJETA CO₂ -->
     <div class="card">
         <h2>MQ135 (CO₂)</h2>
         <h3 id="co2_valor">---</h3>
         <table id="tabla_co2"></table>
     </div>
 
-    <!-- TARJETA CO -->
     <div class="card">
         <h2>MQ9 (CO)</h2>
         <h3 id="co_valor">---</h3>
@@ -100,9 +97,10 @@ document.getElementById("clearBtn").onclick = () => {
     document.getElementById("tabla_co").innerHTML = "";
 };
 
-// ÚLTIMOS DATOS GUARDADOS (para verificar el 10%)
+// Variables de última actualización
 let lastCO2 = null;
 let lastCO = null;
+let lastESPUpdate = 0; // tiempo del último dato recibido
 
 function actualizar() {
     fetch(firebaseURL)
@@ -114,20 +112,10 @@ function actualizar() {
         const co = data.co;
         const last_update = Number(data.last_update) || 0;
 
-        // --- ESTADO DEL ESP32 ---
-        let ahora = Date.now();
-        let diff = Math.abs(ahora - last_update);
+        // Guardamos el último update recibido
+        lastESPUpdate = Date.now();
 
-        if (diff < 30000) { // 30 segundos
-    document.getElementById("status").innerHTML = "ESP32 Conectado ✓";
-    document.getElementById("status").className = "status-box ok";
-} else {
-    document.getElementById("status").innerHTML = "ESP32 Desconectado ✗";
-    document.getElementById("status").className = "status-box fail";
-}
-
-
-        // --- ACTUALIZAR SOLO SI CAMBIA MÁS DE 10% ---
+        // Actualizamos valores si cambian más del 10%
         if (lastCO2 === null || Math.abs((co2 - lastCO2) / lastCO2) > 0.10) {
             document.getElementById("co2_valor").innerText = co2 + " ppm";
             let row = "<tr><td>" + co2 + "</td></tr>";
@@ -141,16 +129,29 @@ function actualizar() {
             document.getElementById("tabla_co").innerHTML = row + document.getElementById("tabla_co").innerHTML;
             lastCO = co;
         }
-    });
+    })
+    .catch(err => console.log("Error al leer Firebase:", err));
 }
 
-// ACTUALIZACIÓN AUTOMÁTICA CADA 10 SEGUNDOS
+// Función para checar si ESP32 está conectado
+function checkConnection() {
+    let ahora = Date.now();
+    let diff = ahora - lastESPUpdate;
+
+    if (diff < 5000) { // conectado si recibimos datos en últimos 5 s
+        document.getElementById("status").innerHTML = "ESP32 Conectado ✓";
+        document.getElementById("status").className = "status-box ok";
+    } else {
+        document.getElementById("status").innerHTML = "ESP32 Desconectado ✗";
+        document.getElementById("status").className = "status-box fail";
+    }
+}
+
+// Actualización automática cada 2 s y verificación de conexión cada 1 s
 actualizar();
-setInterval(actualizar, 5000);
+setInterval(actualizar, 2000);
+setInterval(checkConnection, 1000);
 </script>
 
 </body>
 </html>
-
-
-
