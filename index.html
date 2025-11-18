@@ -3,160 +3,167 @@
 <head>
 <meta charset="UTF-8">
 <title>Monitor de Gases MQ</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
 <style>
-body {
-    font-family: "Times New Roman", serif;
-    background: #4A0070;
-    color: white;
-    text-align: center;
-}
-h1 { font-size: 40px; margin-top: 20px; }
-.status-box { display: inline-block; padding: 10px 20px; border-radius: 12px; font-size: 20px; margin: 20px; }
-.ok { background: #25D366; color: black; }
-.fail { background: #FF4C4C; color: black; }
-.two-columns { display: flex; justify-content: center; gap: 60px; margin-top: 20px; flex-wrap: wrap; }
-.card { background: rgba(255, 255, 255, 0.1); padding: 20px; width: 330px; border-radius: 15px; }
-table { width: 100%; border-collapse: collapse; font-size: 17px; }
-table td { padding: 4px; border-bottom: 1px solid rgba(255,255,255,0.12); }
-button { margin-top: 20px; padding: 10px 30px; font-size: 20px; border: none; border-radius: 10px; cursor: pointer; }
-#startBtn { background: #FFDD33; }
-#stopBtn { background: #FF4C4C; color: black; }
-.chart-row { display: flex; justify-content: center; gap: 20px; margin-top: 20px; flex-wrap: wrap; }
-.chart-card { background: rgba(255, 255, 255, 0.1); padding: 10px; width: 1000px; border-radius: 12px; }
-canvas { width: 100% !important; height: 600px !important; }
+    body {
+        font-family: "Times New Roman", serif;
+        background: #4A0070;
+        color: white;
+        text-align: center;
+    }
+    h1 {
+        font-size: 40px;
+        margin-top: 20px;
+    }
+    .status-box {
+        display: inline-block;
+        padding: 10px 20px;
+        border-radius: 12px;
+        font-size: 20px;
+        margin: 20px;
+    }
+    .ok {
+        background: #25D366;
+        color: black;
+    }
+    .fail {
+        background: #FF4C4C;
+        color: black;
+    }
+    .two-columns {
+        display: flex;
+        justify-content: center;
+        gap: 60px;
+        margin-top: 20px;
+        flex-wrap: wrap;
+    }
+    .card {
+        background: rgba(255, 255, 255, 0.1);
+        padding: 20px;
+        width: 330px;
+        border-radius: 15px;
+    }
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 17px;
+    }
+    table td {
+        padding: 4px;
+        border-bottom: 1px solid rgba(255,255,255,0.12);
+    }
+    #clearBtn {
+        margin-top: 25px;
+        padding: 10px 30px;
+        font-size: 20px;
+        border: none;
+        background: #FFDD33;
+        border-radius: 10px;
+        cursor: pointer;
+    }
 </style>
+
 </head>
 <body>
 
 <h1>Monitor de Gases MQ</h1>
+
 <div id="status" class="status-box fail">ESP32 Desconectado ✗</div>
 
-<button id="startBtn">Iniciar recopilación</button>
-<button id="stopBtn">Detener recopilación</button>
 <button id="clearBtn">Borrar Datos</button>
 
 <div class="two-columns">
+
     <div class="card">
         <h2>MQ135 (CO₂)</h2>
         <h3 id="co2_valor">---</h3>
         <table id="tabla_co2"></table>
     </div>
+
     <div class="card">
         <h2>MQ9 (CO)</h2>
         <h3 id="co_valor">---</h3>
         <table id="tabla_co"></table>
     </div>
-</div>
 
-<div class="chart-row">
-    <div class="chart-card">
-        <h2>Gráfica CO₂</h2>
-        <canvas id="chartCO2"></canvas>
-        <div id="co2_min_max"></div>
-    </div>
-    <div class="chart-card">
-        <h2>Gráfica CO</h2>
-        <canvas id="chartCO"></canvas>
-        <div id="co_min_max"></div>
-    </div>
 </div>
 
 <script>
+
 const firebaseURL = "https://carro-f8554-default-rtdb.firebaseio.com/sensores.json";
 
+document.getElementById("clearBtn").onclick = () => {
+    document.getElementById("tabla_co2").innerHTML = "";
+    document.getElementById("tabla_co").innerHTML = "";
+};
+
+// Variables de control
 let lastCO2 = null;
 let lastCO = null;
 let lastESPUpdate = 0;
 let lastFirebaseTime = 0;
-let collecting = false;
-let historyData = [];
 
-let ctxCO2 = document.getElementById('chartCO2').getContext('2d');
-let ctxCO = document.getElementById('chartCO').getContext('2d');
-let chartCO2 = null;
-let chartCO = null;
-
-// Botones
-document.getElementById("startBtn").onclick = () => { collecting=true; historyData=[]; if(chartCO2){chartCO2.destroy(); chartCO2=null;} if(chartCO){chartCO.destroy(); chartCO=null;} };
-document.getElementById("stopBtn").onclick = () => { collecting=false; drawCharts(); };
-document.getElementById("clearBtn").onclick = () => { document.getElementById("tabla_co2").innerHTML=""; document.getElementById("tabla_co").innerHTML=""; historyData=[]; };
-
-// Función principal de actualización
 function actualizar() {
     fetch(firebaseURL)
-    .then(res=>res.json())
-    .then(data=>{
-        if(!data) return;
-        const co2 = parseFloat(data.co2);
-        const co = parseFloat(data.co);
-        const last_update = Number(data.last_update)||0;
+        .then(res => res.json())
+        .then(data => {
+            if (!data) return;
 
-        // Actualiza estado de conexión
-        if(last_update !== lastFirebaseTime){
-            lastESPUpdate = Date.now();
-            lastFirebaseTime = last_update;
-        }
+            const co2 = data.co2;
+            const co = data.co;
+            const last_update = Number(data.last_update) || 0;
 
-        // Actualizar valores si cambian >10%
-        if(lastCO2===null || Math.abs((co2-lastCO2)/lastCO2)>0.1){
-            document.getElementById("co2_valor").innerText = co2.toFixed(1)+" ppm";
-            let row="<tr><td>"+co2.toFixed(1)+"</td></tr>";
-            document.getElementById("tabla_co2").innerHTML=row+document.getElementById("tabla_co2").innerHTML;
-            lastCO2=co2;
-        }
+            // Registrar que llegaron nuevos datos
+            if (last_update !== lastFirebaseTime) {
+                lastESPUpdate = Date.now();
+                lastFirebaseTime = last_update;
+            }
 
-        if(lastCO===null || Math.abs((co-lastCO)/lastCO)>0.1){
-            document.getElementById("co_valor").innerText = co.toFixed(1)+" ppm";
-            let row="<tr><td>"+co.toFixed(1)+"</td></tr>";
-            document.getElementById("tabla_co").innerHTML=row+document.getElementById("tabla_co").innerHTML;
-            lastCO=co;
-        }
+            // Actualizar CO2 si cambió más del 10%
+            if (lastCO2 === null || Math.abs((co2 - lastCO2) / lastCO2) > 0.1) {
+                document.getElementById("co2_valor").innerText = co2 + " ppm";
 
-        if(collecting){
-            const timestamp = new Date(last_update).toLocaleTimeString();
-            historyData.push({time: timestamp, co2, co});
-        }
-    })
-    .catch(err=>console.log("Error al leer Firebase:", err));
+                let row = "<tr><td>" + co2 + "</td></tr>";
+                document.getElementById("tabla_co2").innerHTML =
+                    row + document.getElementById("tabla_co2").innerHTML;
+
+                lastCO2 = co2;
+            }
+
+            // Actualizar CO si cambió más del 10%
+            if (lastCO === null || Math.abs((co - lastCO) / lastCO) > 0.1) {
+                document.getElementById("co_valor").innerText = co + " ppm";
+
+                let row = "<tr><td>" + co + "</td></tr>";
+                document.getElementById("tabla_co").innerHTML =
+                    row + document.getElementById("tabla_co").innerHTML;
+
+                lastCO = co;
+            }
+        })
+        .catch(err => console.log("Error al leer Firebase:", err));
 }
 
-// Chequear estado ESP32
-function checkConnection(){
-    const diff = Date.now()-lastESPUpdate;
-    if(diff<5000){ document.getElementById("status").innerHTML="ESP32 Conectado ✓"; document.getElementById("status").className="status-box ok"; }
-    else{ document.getElementById("status").innerHTML="ESP32 Desconectado ✗"; document.getElementById("status").className="status-box fail"; }
-}
+function checkConnection() {
+    const ahora = Date.now();
+    const diff = ahora - lastESPUpdate;
 
-// Función para graficar datos históricos
-function drawCharts(){
-    if(chartCO2) chartCO2.destroy();
-    if(chartCO) chartCO.destroy();
-
-    chartCO2 = new Chart(ctxCO2,{type:'line',
-        data:{labels:historyData.map(d=>d.time), datasets:[{label:'CO2 (ppm)', data:historyData.map(d=>d.co2), borderColor:'lime', fill:false, tension:0.1}]},
-        options:{responsive:false, maintainAspectRatio:false, plugins:{legend:{labels:{color:'white'}}}, scales:{x:{ticks:{color:'white'}},y:{min:0,ticks:{color:'white'},beginAtZero:true}}}
-    });
-
-    chartCO = new Chart(ctxCO,{type:'line',
-        data:{labels:historyData.map(d=>d.time), datasets:[{label:'CO (ppm)', data:historyData.map(d=>d.co), borderColor:'yellow', fill:false, tension:0.1}]},
-        options:{responsive:false, maintainAspectRatio:false, plugins:{legend:{labels:{color:'white'}}}, scales:{x:{ticks:{color:'white'}},y:{min:0,ticks:{color:'white'},beginAtZero:true}}}
-    });
-
-    // Mostrar máximos y mínimos
-    if(historyData.length>0){
-        const co2Vals=historyData.map(d=>d.co2);
-        const coVals=historyData.map(d=>d.co);
-        document.getElementById("co2_min_max").innerText=`Máx: ${Math.max(...co2Vals).toFixed(1)} ppm, Mín: ${Math.min(...co2Vals).toFixed(1)} ppm`;
-        document.getElementById("co_min_max").innerText=`Máx: ${Math.max(...coVals).toFixed(1)} ppm, Mín: ${Math.min(...coVals).toFixed(1)} ppm`;
+    if (diff < 5000) {
+        document.getElementById("status").innerHTML = "ESP32 Conectado ✓";
+        document.getElementById("status").className = "status-box ok";
+    } else {
+        document.getElementById("status").innerHTML = "ESP32 Desconectado ✗";
+        document.getElementById("status").className = "status-box fail";
     }
 }
 
 // Inicialización
 actualizar();
-setInterval(actualizar,2000);
-setInterval(checkConnection,1000);
+setInterval(actualizar, 2000);
+setInterval(checkConnection, 1000);
+
 </script>
 
 </body>
 </html>
+
