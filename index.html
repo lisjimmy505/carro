@@ -5,12 +5,7 @@
 <title>Monitor de Gases MQ</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
-body {
-    font-family: "Times New Roman", serif;
-    background: #4A0070;
-    color: white;
-    text-align: center;
-}
+body { font-family: "Times New Roman", serif; background: #4A0070; color: white; text-align: center; }
 h1 { font-size: 40px; margin-top: 20px; }
 .status-box { display: inline-block; padding: 10px 20px; border-radius: 12px; font-size: 20px; margin: 20px; }
 .ok { background: #25D366; color: black; }
@@ -63,36 +58,33 @@ canvas { width: 100% !important; height: 600px !important; }
 </div>
 
 <script>
-const firebaseURL = "https://carro-f8554-default-rtdb.firebaseio.com/sensores.json";
+const firebaseURL = "https://carro-f8554-default-rtdb.firebaseio.com/historial.json";
 
-let lastCO2 = null;
-let lastCO = null;
-let lastESPUpdate = 0;
-let collecting = false;
-let historyData = [];
+let lastCO2=null, lastCO=null;
+let lastESPUpdate = Date.now();
+let collecting=false;
+let historyData=[];
 
 let ctxCO2 = document.getElementById('chartCO2').getContext('2d');
 let ctxCO = document.getElementById('chartCO').getContext('2d');
-let chartCO2 = null;
-let chartCO = null;
+let chartCO2=null, chartCO=null;
 
-document.getElementById("startBtn").onclick = () => {
-    collecting = true;
-    historyData = [];
-    if(chartCO2){ chartCO2.destroy(); chartCO2=null; }
-    if(chartCO){ chartCO.destroy(); chartCO=null; }
+document.getElementById("startBtn").onclick = ()=>{
+    collecting=true; historyData=[];
+    if(chartCO2){chartCO2.destroy(); chartCO2=null;}
+    if(chartCO){chartCO.destroy(); chartCO=null;}
 };
 
-document.getElementById("stopBtn").onclick = () => { collecting=false; drawCharts(); };
+document.getElementById("stopBtn").onclick = ()=>{ collecting=false; drawCharts(); };
 
-document.getElementById("clearBtn").onclick = () => {
+document.getElementById("clearBtn").onclick = ()=>{
     document.getElementById("tabla_co2").innerHTML="";
     document.getElementById("tabla_co").innerHTML="";
     historyData=[];
 };
 
 // Actualizar datos
-function actualizar() {
+function actualizar(){
     fetch(firebaseURL)
     .then(res=>res.json())
     .then(data=>{
@@ -100,30 +92,31 @@ function actualizar() {
 
         lastESPUpdate = Date.now();
 
-        const co2 = parseFloat(data.co2);
-        const co = parseFloat(data.co);
-        const last_update = Number(data.last_update)||0;
+        let allData = Object.values(data);
+        allData.sort((a,b)=>a.timestamp-b.timestamp);
 
-        if(lastCO2===null || Math.abs((co2-lastCO2)/lastCO2)>0.1){
-            document.getElementById("co2_valor").innerText = co2.toFixed(1)+" ppm";
-            let row="<tr><td>"+co2.toFixed(1)+"</td></tr>";
-            document.getElementById("tabla_co2").innerHTML=row+document.getElementById("tabla_co2").innerHTML;
-            lastCO2 = co2;
-        }
+        allData.forEach(d=>{
+            const co2=parseFloat(d.co2);
+            const co=parseFloat(d.co);
+            const timestamp = new Date(d.timestamp).toLocaleTimeString();
 
-        if(lastCO===null || Math.abs((co-lastCO)/lastCO)>0.1){
-            document.getElementById("co_valor").innerText = co.toFixed(1)+" ppm";
-            let row="<tr><td>"+co.toFixed(1)+"</td></tr>";
-            document.getElementById("tabla_co").innerHTML=row+document.getElementById("tabla_co").innerHTML;
-            lastCO = co;
-        }
+            if(lastCO2===null || Math.abs((co2-lastCO2)/lastCO2)>0.01){
+                document.getElementById("co2_valor").innerText = co2.toFixed(1)+" ppm";
+                document.getElementById("tabla_co2").innerHTML="<tr><td>"+co2.toFixed(1)+"</td></tr>"+document.getElementById("tabla_co2").innerHTML;
+                lastCO2=co2;
+            }
+            if(lastCO===null || Math.abs((co-lastCO)/lastCO)>0.01){
+                document.getElementById("co_valor").innerText = co.toFixed(1)+" ppm";
+                document.getElementById("tabla_co").innerHTML="<tr><td>"+co.toFixed(1)+"</td></tr>"+document.getElementById("tabla_co").innerHTML;
+                lastCO=co;
+            }
 
-        if(collecting){
-            const timestamp = new Date(last_update).toLocaleTimeString();
-            historyData.push({time: timestamp, co2, co});
-        }
+            if(collecting){
+                historyData.push({time: timestamp, co2, co});
+            }
+        });
     })
-    .catch(err=>{ console.log("Error al leer Firebase:", err); });
+    .catch(err=>{ console.log(err); });
 }
 
 // Estado ESP32
@@ -143,13 +136,13 @@ function drawCharts(){
     if(chartCO2) chartCO2.destroy();
     if(chartCO) chartCO.destroy();
 
-    chartCO2 = new Chart(ctxCO2,{
+    chartCO2=new Chart(ctxCO2,{
         type:'line',
         data:{labels:historyData.map(d=>d.time), datasets:[{label:'CO2 (ppm)', data:historyData.map(d=>d.co2), borderColor:'lime', fill:false, tension:0.1}]},
         options:{responsive:false, maintainAspectRatio:false, plugins:{legend:{labels:{color:'white'}}}, scales:{x:{ticks:{color:'white'}},y:{min:0,ticks:{color:'white'},beginAtZero:true}}}
     });
 
-    chartCO = new Chart(ctxCO,{
+    chartCO=new Chart(ctxCO,{
         type:'line',
         data:{labels:historyData.map(d=>d.time), datasets:[{label:'CO (ppm)', data:historyData.map(d=>d.co), borderColor:'yellow', fill:false, tension:0.1}]},
         options:{responsive:false, maintainAspectRatio:false, plugins:{legend:{labels:{color:'white'}}}, scales:{x:{ticks:{color:'white'}},y:{min:0,ticks:{color:'white'},beginAtZero:true}}}
@@ -163,11 +156,9 @@ function drawCharts(){
     }
 }
 
-// Inicializar
 actualizar();
 setInterval(actualizar,2000);
 setInterval(checkConnection,1000);
 </script>
-
 </body>
 </html>
