@@ -1,57 +1,129 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Monitor de Gases MQ</title>
+<style>
+    body {
+        font-family: "Times New Roman", serif;
+        background: #4A0070;
+        color: white;
+        text-align: center;
+    }
+    h1 { font-size: 40px; margin-top: 20px; }
+    .sensor-box, .status-box {
+        width: 300px;
+        margin: 10px auto;
+        padding: 15px;
+        border-radius: 10px;
+        background: #62009b;
+        font-size: 22px;
+    }
+    .status-box.ok { background: green; }
+    .status-box.fail { background: red; }
+    table {
+        width: 300px;
+        margin: 10px auto;
+        background: #5a0088;
+        border-radius: 10px;
+        padding: 10px;
+        font-size: 18px;
+    }
+</style>
+</head>
+
+<body>
+<h1>Monitor de Gases MQ</h1>
+
+<div id="status" class="status-box fail">ESP32 Desconectado ✗</div>
+
+<div class="sensor-box">
+    <h2>MQ-135 (CO₂)</h2>
+    <p id="co2_valor">--- ppm</p>
+    <table><tbody id="tabla_co2"></tbody></table>
+</div>
+
+<div class="sensor-box">
+    <h2>MQ-7 (CO)</h2>
+    <p id="co_valor">--- ppm</p>
+    <table><tbody id="tabla_co"></tbody></table>
+</div>
+
 <script>
 const firebaseURL = "https://carro-f8554-default-rtdb.firebaseio.com/sensores.json";
 
 let lastCO2 = null;
 let lastCO = null;
-let lastESPUpdate = 0;
+let lastESPUpdate = 0;      // tiempo del navegador de la última recepción
+let lastFirebaseTime = 0;   // last_update que viene desde el ESP
 let collecting = false;
 let historyData = [];
 
-// === ❗ MODIFICADO: ahora se usa last_update REAL del ESP32 ===
+// ===============================
+// 📌 FUNCIÓN PRINCIPAL DE ACTUALIZACIÓN
+// ===============================
 function actualizar() {
     fetch(firebaseURL)
-    .then(res=>res.json())
-    .then(data=>{
-        if(!data) return;
+    .then(res => res.json())
+    .then(data => {
+        if (!data) return;
 
         const co2 = parseFloat(data.co2);
         const co = parseFloat(data.co);
         const last_update = Number(data.last_update) || 0;
 
-        // 🔥 Guardamos el timestamp REAL enviado por el ESP32
-        lastESPUpdate = last_update;
+        // **** LÓGICA REAL DE DETECCIÓN DE DATOS NUEVOS ****
+        if (last_update !== lastFirebaseTime) {
+            lastFirebaseTime = last_update;
+            lastESPUpdate = Date.now();   // marcamos llegada REAL de datos
+        }
 
-        if(lastCO2===null || Math.abs((co2-lastCO2)/lastCO2)>0.1){
-            document.getElementById("co2_valor").innerText = co2.toFixed(1)+" ppm";
-            let row="<tr><td>"+co2.toFixed(1)+"</td></tr>";
-            document.getElementById("tabla_co2").innerHTML=row+document.getElementById("tabla_co2").innerHTML;
+        // ---- Actualización MQ-135 CO2 (solo si cambia ≥10%) ----
+        if (!isNaN(co2) && (lastCO2 === null || Math.abs((co2 - lastCO2) / lastCO2) > 0.1)) {
+            document.getElementById("co2_valor").innerText = co2.toFixed(1) + " ppm";
+            let row = "<tr><td>" + co2.toFixed(1) + "</td></tr>";
+            document.getElementById("tabla_co2").innerHTML =
+                row + document.getElementById("tabla_co2").innerHTML;
             lastCO2 = co2;
         }
 
-        if(lastCO===null || Math.abs((co-lastCO)/lastCO)>0.1){
-            document.getElementById("co_valor").innerText = co.toFixed(1)+" ppm";
-            let row="<tr><td>"+co.toFixed(1)+"</td></tr>";
-            document.getElementById("tabla_co").innerHTML=row+document.getElementById("tabla_co").innerHTML;
+        // ---- Actualización MQ-7 CO (solo si cambia ≥10%) ----
+        if (!isNaN(co) && (lastCO === null || Math.abs((co - lastCO) / lastCO) > 0.1)) {
+            document.getElementById("co_valor").innerText = co.toFixed(1) + " ppm";
+            let row = "<tr><td>" + co.toFixed(1) + "</td></tr>";
+            document.getElementById("tabla_co").innerHTML =
+                row + document.getElementById("tabla_co").innerHTML;
             lastCO = co;
         }
 
-        if(collecting){
-            const timestamp = new Date(last_update).toLocaleTimeString();
-            historyData.push({time: timestamp, co2, co});
+        // Historial (si lo usas después)
+        if (collecting) {
+            const timestamp = last_update ?
+                new Date(last_update).toLocaleTimeString() :
+                new Date().toLocaleTimeString();
+            historyData.push({ time: timestamp, co2, co });
         }
     })
-    .catch(err=>{
+    .catch(err => {
         console.log("Error al leer Firebase:", err);
+        // NO actualizamos lastESPUpdate — permite detectar desconexión real
     });
 }
 
+// ===============================
+// 📌 DETECCIÓN DE CONEXIÓN / DESCONEXIÓN
+// ===============================
+function checkConnection() {
+    // Si nunca han llegado datos
+    if (lastESPUpdate === 0) {
+        document.getElementById("status").innerHTML = "ESP32 Desconectado ✗";
+        document.getElementById("status").className = "status-box fail";
+        return;
+    }
 
-// === ❗ MODIFICADO: detección real de desconexión con timestamp del ESP32 ===
-function checkConnection(){
     const diff = Date.now() - lastESPUpdate;
 
-    // Si el ESP no actualiza en 6 segundos → está desconectado
-    if(diff < 6000){
+    if (diff < 6000) { // < 6 segundos
         document.getElementById("status").innerHTML = "ESP32 Conectado ✓";
         document.getElementById("status").className = "status-box ok";
     } else {
@@ -60,8 +132,13 @@ function checkConnection(){
     }
 }
 
-// === mantiene tu lógica original ===
+// ===============================
+// ⏱️ INTERVALOS
+// ===============================
 actualizar();
-setInterval(actualizar, 2000);
-setInterval(checkConnection, 1000);
+setInterval(actualizar, 2000);      // Lee la base de datos cada 2 s
+setInterval(checkConnection, 1000); // Verifica conexión cada 1 s
 </script>
+
+</body>
+</html>
