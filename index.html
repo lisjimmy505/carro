@@ -30,7 +30,6 @@ canvas { width: 100% !important; height: 600px !important; }
 <body>
 
 <h1>Monitor de Gases MQ</h1>
-
 <div id="status" class="status-box fail">ESP32 Desconectado ✗</div>
 
 <button id="startBtn">Iniciar recopilación</button>
@@ -40,12 +39,10 @@ canvas { width: 100% !important; height: 600px !important; }
     <div class="card">
         <h2>MQ135 (CO₂)</h2>
         <h3 id="co2_valor">---</h3>
-        <table id="tabla_co2"></table>
     </div>
     <div class="card">
         <h2>MQ9 (CO)</h2>
         <h3 id="co_valor">---</h3>
-        <table id="tabla_co"></table>
     </div>
 </div>
 
@@ -53,20 +50,19 @@ canvas { width: 100% !important; height: 600px !important; }
     <div class="chart-card">
         <h2>Gráfica CO₂</h2>
         <canvas id="chartCO2"></canvas>
+        <div id="co2_min_max"></div>
     </div>
     <div class="chart-card">
         <h2>Gráfica CO</h2>
         <canvas id="chartCO"></canvas>
+        <div id="co_min_max"></div>
     </div>
 </div>
 
 <script>
 const firebaseURL = "https://carro-f8554-default-rtdb.firebaseio.com/sensores.json";
 
-let lastCO2 = null;
-let lastCO = null;
 let lastESPUpdate = 0;
-let lastFirebaseTime = 0;
 let collecting = false;
 let historyData = [];
 
@@ -93,27 +89,17 @@ function actualizar() {
     .then(data => {
         if (!data) return;
 
-        const co2 = data.co2;
-        const co = data.co;
+        const co2 = parseFloat(data.co2);
+        const co  = parseFloat(data.co);
         const last_update = Number(data.last_update) || 0;
 
-        if (last_update !== lastFirebaseTime) {
-            lastESPUpdate = Date.now();
-            lastFirebaseTime = last_update;
-        }
+        lastESPUpdate = last_update;
 
-        if (lastCO2 === null || Math.abs((co2 - lastCO2)/lastCO2) > 0.1) {
-            document.getElementById("co2_valor").innerText = co2 + " ppm";
-            lastCO2 = co2;
-        }
-
-        if (lastCO === null || Math.abs((co - lastCO)/lastCO) > 0.1) {
-            document.getElementById("co_valor").innerText = co + " ppm";
-            lastCO = co;
-        }
+        document.getElementById("co2_valor").innerText = co2.toFixed(1) + " ppm";
+        document.getElementById("co_valor").innerText = co.toFixed(1) + " ppm";
 
         if (collecting) {
-            const timestamp = new Date().toLocaleTimeString();
+            const timestamp = new Date(last_update).toLocaleTimeString();
             historyData.push({time: timestamp, co2: co2, co: co});
         }
     })
@@ -136,47 +122,17 @@ function drawCharts() {
     if(chartCO2) chartCO2.destroy();
     if(chartCO) chartCO.destroy();
 
-    function maxMinIndices(data) {
-        let maxIdx = 0, minIdx = 0;
-        for(let i=0;i<data.length;i++){
-            if(data[i] > data[maxIdx]) maxIdx = i;
-            if(data[i] < data[minIdx]) minIdx = i;
-        }
-        return {maxIdx, minIdx};
-    }
-
     chartCO2 = new Chart(ctxCO2, {
         type: 'line',
         data: {
             labels: historyData.map(d => d.time),
-            datasets: [
-                { label: 'CO2 (ppm)', data: historyData.map(d => d.co2), borderColor: 'lime', fill: false, tension: 0.1 }
-            ]
+            datasets: [{ label: 'CO2 (ppm)', data: historyData.map(d => d.co2), borderColor: 'lime', fill: false, tension: 0.1 }]
         },
         options: {
             responsive: false,
             maintainAspectRatio: false,
-            plugins: {
-                legend: { labels: { color: 'white' } },
-                tooltip: { enabled: true },
-                afterDatasetsDraw: (chart) => {
-                    const ctx = chart.ctx;
-                    const dataset = chart.data.datasets[0].data;
-                    const {maxIdx, minIdx} = maxMinIndices(dataset);
-                    ctx.fillStyle = 'white';
-                    ctx.font = 'bold 14px Arial';
-                    const xMax = chart.getDatasetMeta(0).data[maxIdx].x;
-                    const yMax = chart.getDatasetMeta(0).data[maxIdx].y;
-                    ctx.fillText(dataset[maxIdx].toFixed(1), xMax + 5, yMax - 5);
-                    const xMin = chart.getDatasetMeta(0).data[minIdx].x;
-                    const yMin = chart.getDatasetMeta(0).data[minIdx].y;
-                    ctx.fillText(dataset[minIdx].toFixed(1), xMin + 5, yMin + 15);
-                }
-            },
-            scales: {
-                x: { ticks: { color: 'white' } },
-                y: { min: 0, ticks: { color: 'white' }, beginAtZero: true }
-            }
+            plugins: { legend: { labels: { color: 'white' } } },
+            scales: { x: { ticks: { color: 'white' } }, y: { min: 0, ticks: { color: 'white' }, beginAtZero: true } }
         }
     });
 
@@ -184,36 +140,29 @@ function drawCharts() {
         type: 'line',
         data: {
             labels: historyData.map(d => d.time),
-            datasets: [
-                { label: 'CO (ppm)', data: historyData.map(d => d.co), borderColor: 'yellow', fill: false, tension: 0.1 }
-            ]
+            datasets: [{ label: 'CO (ppm)', data: historyData.map(d => d.co), borderColor: 'yellow', fill: false, tension: 0.1 }]
         },
         options: {
             responsive: false,
             maintainAspectRatio: false,
-            plugins: {
-                legend: { labels: { color: 'white' } },
-                tooltip: { enabled: true },
-                afterDatasetsDraw: (chart) => {
-                    const ctx = chart.ctx;
-                    const dataset = chart.data.datasets[0].data;
-                    const {maxIdx, minIdx} = maxMinIndices(dataset);
-                    ctx.fillStyle = 'white';
-                    ctx.font = 'bold 14px Arial';
-                    const xMax = chart.getDatasetMeta(0).data[maxIdx].x;
-                    const yMax = chart.getDatasetMeta(0).data[maxIdx].y;
-                    ctx.fillText(dataset[maxIdx].toFixed(2), xMax + 5, yMax - 5);
-                    const xMin = chart.getDatasetMeta(0).data[minIdx].x;
-                    const yMin = chart.getDatasetMeta(0).data[minIdx].y;
-                    ctx.fillText(dataset[minIdx].toFixed(2), xMin + 5, yMin + 15);
-                }
-            },
-            scales: {
-                x: { ticks: { color: 'white' } },
-                y: { min: 0, ticks: { color: 'white' }, beginAtZero: true }
-            }
+            plugins: { legend: { labels: { color: 'white' } } },
+            scales: { x: { ticks: { color: 'white' } }, y: { min: 0, ticks: { color: 'white' }, beginAtZero: true } }
         }
     });
+
+    // Mostrar máximos y mínimos
+    const co2Vals = historyData.map(d => d.co2);
+    const coVals  = historyData.map(d => d.co);
+    if(co2Vals.length>0){
+        const maxCO2 = Math.max(...co2Vals);
+        const minCO2 = Math.min(...co2Vals);
+        document.getElementById("co2_min_max").innerText = `Máx: ${maxCO2.toFixed(1)} ppm, Mín: ${minCO2.toFixed(1)} ppm`;
+    }
+    if(coVals.length>0){
+        const maxCO = Math.max(...coVals);
+        const minCO = Math.min(...coVals);
+        document.getElementById("co_min_max").innerText = `Máx: ${maxCO.toFixed(1)} ppm, Mín: ${minCO.toFixed(1)} ppm`;
+    }
 }
 
 actualizar();
