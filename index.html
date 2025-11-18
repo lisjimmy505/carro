@@ -78,9 +78,18 @@ let chartCO2 = null;
 let chartCO = null;
 
 // Botones
-document.getElementById("startBtn").onclick = () => { collecting=true; historyData=[]; if(chartCO2){chartCO2.destroy(); chartCO2=null;} if(chartCO){chartCO.destroy(); chartCO=null;} };
+document.getElementById("startBtn").onclick = () => {
+    collecting=true;
+    historyData=[];
+    if(chartCO2){chartCO2.destroy(); chartCO2=null;}
+    if(chartCO){chartCO.destroy(); chartCO=null;}
+};
 document.getElementById("stopBtn").onclick = () => { collecting=false; drawCharts(); };
-document.getElementById("clearBtn").onclick = () => { document.getElementById("tabla_co2").innerHTML=""; document.getElementById("tabla_co").innerHTML=""; historyData=[]; };
+document.getElementById("clearBtn").onclick = () => {
+    document.getElementById("tabla_co2").innerHTML="";
+    document.getElementById("tabla_co").innerHTML="";
+    historyData=[];
+};
 
 // Función principal de actualización
 function actualizar() {
@@ -88,15 +97,14 @@ function actualizar() {
     .then(res=>res.json())
     .then(data=>{
         if(!data) return;
+
+        // Si hay datos, actualizar la marca de tiempo de último contacto
+        lastESPUpdate = Date.now();
+
         const co2 = parseFloat(data.co2);
         const co = parseFloat(data.co);
         const last_update = Number(data.last_update)||0;
-
-        // Actualiza estado de conexión
-        if(last_update !== lastFirebaseTime){
-            lastESPUpdate = Date.now();
-            lastFirebaseTime = last_update;
-        }
+        lastFirebaseTime = last_update;
 
         // Actualizar valores si cambian >10%
         if(lastCO2===null || Math.abs((co2-lastCO2)/lastCO2)>0.1){
@@ -118,14 +126,22 @@ function actualizar() {
             historyData.push({time: timestamp, co2, co});
         }
     })
-    .catch(err=>console.log("Error al leer Firebase:", err));
+    .catch(err=>{
+        console.log("Error al leer Firebase:", err);
+        // Si hay error al leer Firebase, no actualizar lastESPUpdate → marcará desconectado
+    });
 }
 
 // Chequear estado ESP32
 function checkConnection(){
     const diff = Date.now()-lastESPUpdate;
-    if(diff<5000){ document.getElementById("status").innerHTML="ESP32 Conectado ✓"; document.getElementById("status").className="status-box ok"; }
-    else{ document.getElementById("status").innerHTML="ESP32 Desconectado ✗"; document.getElementById("status").className="status-box fail"; }
+    if(diff<5000){
+        document.getElementById("status").innerHTML="ESP32 Conectado ✓";
+        document.getElementById("status").className="status-box ok";
+    } else {
+        document.getElementById("status").innerHTML="ESP32 Desconectado ✗";
+        document.getElementById("status").className="status-box fail";
+    }
 }
 
 // Función para graficar datos históricos
