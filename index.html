@@ -145,34 +145,15 @@ function drawCharts() {
             ]
         },
         options: {
-    responsive: false,
-    maintainAspectRatio: false,
-    plugins: { 
-        legend: { 
-            labels: { 
-                color: 'white',
-                font: { size: 14 } // tamaño fijo de la leyenda
-            } 
-        } 
-    },
-    scales: {
-        x: { 
-            ticks: { 
-                color: 'white', 
-                font: { size: 12 } // tamaño fijo de ticks eje X
-            } 
-        },
-        y: { 
-            min: 0, 
-            ticks: { 
-                color: 'white', 
-                font: { size: 12 } // tamaño fijo de ticks eje Y
-            }, 
-            beginAtZero: true 
+            responsive: false,
+            maintainAspectRatio: false,
+            plugins: { legend: { labels: { color: 'white' } } },
+            scales: {
+                x: { ticks: { color: 'white' } },
+                y: { min: 0, ticks: { color: 'white' }, beginAtZero: true } // comienza en 0
+            }
         }
-    }
-}
-);
+    });
 
     chartCO = new Chart(ctxCO, {
         type: 'line',
@@ -182,35 +163,16 @@ function drawCharts() {
                 { label: 'CO (ppm)', data: historyData.map(d => d.co), borderColor: 'yellow', fill: false, tension: 0.1 }
             ]
         },
-    options: {
-    responsive: false,
-    maintainAspectRatio: false,
-    plugins: { 
-        legend: { 
-            labels: { 
-                color: 'white',
-                font: { size: 14 } // tamaño fijo de la leyenda
-            } 
-        } 
-    },
-    scales: {
-        x: { 
-            ticks: { 
-                color: 'white', 
-                font: { size: 12 } // tamaño fijo de ticks eje X
-            } 
-        },
-        y: { 
-            min: 0, 
-            ticks: { 
-                color: 'white', 
-                font: { size: 12 } // tamaño fijo de ticks eje Y
-            }, 
-            beginAtZero: true 
+        options: {
+            responsive: false,
+            maintainAspectRatio: false,
+            plugins: { legend: { labels: { color: 'white' } } },
+            scales: {
+                x: { ticks: { color: 'white' } },
+                y: { min: 0, ticks: { color: 'white' }, beginAtZero: true } // comienza en 0
+            }
         }
-    }
-}
-);
+    });
 }
 
 actualizar();
@@ -220,4 +182,3 @@ setInterval(checkConnection, 1000);
 
 </body>
 </html>
-
