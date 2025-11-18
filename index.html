@@ -1,178 +1,66 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<title>Monitor de Gases MQ</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<style>
-body {
-    font-family: "Times New Roman", serif;
-    background: #4A0070;
-    color: white;
-    text-align: center;
-}
-h1 { font-size: 40px; margin-top: 20px; }
-.status-box { display: inline-block; padding: 10px 20px; border-radius: 12px; font-size: 20px; margin: 20px; }
-.ok { background: #25D366; color: black; }
-.fail { background: #FF4C4C; color: black; }
-.two-columns { display: flex; justify-content: center; gap: 60px; margin-top: 20px; flex-wrap: wrap; }
-.card { background: rgba(255, 255, 255, 0.1); padding: 20px; width: 330px; border-radius: 15px; }
-table { width: 100%; border-collapse: collapse; font-size: 17px; }
-table td { padding: 4px; border-bottom: 1px solid rgba(255,255,255,0.12); }
-button { margin-top: 20px; padding: 10px 30px; font-size: 20px; border: none; border-radius: 10px; cursor: pointer; }
-#startBtn { background: #FFDD33; }
-#stopBtn { background: #FF4C4C; color: black; }
-.chart-row { display: flex; justify-content: center; gap: 20px; margin-top: 20px; flex-wrap: wrap; }
-.chart-card { background: rgba(255, 255, 255, 0.1); padding: 10px; width: 1000px; border-radius: 12px; }
-canvas { width: 100% !important; height: 600px !important; }
-</style>
-</head>
-<body>
+void loop() {
+  if(millis()-lastSend>=sendInterval){
+    lastSend = millis();
 
-<h1>Monitor de Gases MQ</h1>
-<div id="status" class="status-box fail">ESP32 Desconectado ✗</div>
+    // Leer sensores
+    int rawCO2 = leerSensor(PIN_MQ135);
+    int rawCO  = leerSensor(PIN_MQ9);
+    float co2ppm = rawCO2*factorCO2*1.21*1.2;
+    float coppm  = rawCO*factorCO;
+    unsigned long t = millis();
 
-<button id="startBtn">Iniciar recopilación</button>
-<button id="stopBtn">Detener recopilación</button>
-<button id="clearBtn">Borrar Datos</button>
+    // Guardar siempre en SPIFFS
+    guardarLecturaSPIFFS(co2ppm, coppm, t);
 
-<div class="two-columns">
-    <div class="card">
-        <h2>MQ135 (CO₂)</h2>
-        <h3 id="co2_valor">---</h3>
-        <table id="tabla_co2"></table>
-    </div>
-    <div class="card">
-        <h2>MQ9 (CO)</h2>
-        <h3 id="co_valor">---</h3>
-        <table id="tabla_co"></table>
-    </div>
-</div>
-
-<div class="chart-row">
-    <div class="chart-card">
-        <h2>Gráfica CO₂</h2>
-        <canvas id="chartCO2"></canvas>
-        <div id="co2_min_max"></div>
-    </div>
-    <div class="chart-card">
-        <h2>Gráfica CO</h2>
-        <canvas id="chartCO"></canvas>
-        <div id="co_min_max"></div>
-    </div>
-</div>
-
-<script>
-const firebaseURL = "https://carro-f8554-default-rtdb.firebaseio.com/sensores.json";
-
-let lastCO2 = null;
-let lastCO = null;
-let lastESPUpdate = 0;
-let lastFirebaseTime = 0;
-let collecting = false;
-let historyData = [];
-
-let ctxCO2 = document.getElementById('chartCO2').getContext('2d');
-let ctxCO = document.getElementById('chartCO').getContext('2d');
-let chartCO2 = null;
-let chartCO = null;
-
-// Botones
-document.getElementById("startBtn").onclick = () => {
-    collecting=true;
-    historyData=[];
-    if(chartCO2){chartCO2.destroy(); chartCO2=null;}
-    if(chartCO){chartCO.destroy(); chartCO=null;}
-};
-document.getElementById("stopBtn").onclick = () => { collecting=false; drawCharts(); };
-document.getElementById("clearBtn").onclick = () => {
-    document.getElementById("tabla_co2").innerHTML="";
-    document.getElementById("tabla_co").innerHTML="";
-    historyData=[];
-};
-
-// Función principal de actualización
-function actualizar() {
-    fetch(firebaseURL)
-    .then(res=>res.json())
-    .then(data=>{
-        if(!data) return;
-
-        // Si hay datos, actualizar la marca de tiempo de último contacto
-        lastESPUpdate = Date.now();
-
-        const co2 = parseFloat(data.co2);
-        const co = parseFloat(data.co);
-        const last_update = Number(data.last_update)||0;
-        lastFirebaseTime = last_update;
-
-        // Actualizar valores si cambian >10%
-        if(lastCO2===null || Math.abs((co2-lastCO2)/lastCO2)>0.1){
-            document.getElementById("co2_valor").innerText = co2.toFixed(1)+" ppm";
-            let row="<tr><td>"+co2.toFixed(1)+"</td></tr>";
-            document.getElementById("tabla_co2").innerHTML=row+document.getElementById("tabla_co2").innerHTML;
-            lastCO2=co2;
-        }
-
-        if(lastCO===null || Math.abs((co-lastCO)/lastCO)>0.1){
-            document.getElementById("co_valor").innerText = co.toFixed(1)+" ppm";
-            let row="<tr><td>"+co.toFixed(1)+"</td></tr>";
-            document.getElementById("tabla_co").innerHTML=row+document.getElementById("tabla_co").innerHTML;
-            lastCO=co;
-        }
-
-        if(collecting){
-            const timestamp = new Date(last_update).toLocaleTimeString();
-            historyData.push({time: timestamp, co2, co});
-        }
-    })
-    .catch(err=>{
-        console.log("Error al leer Firebase:", err);
-        // Si hay error al leer Firebase, no actualizar lastESPUpdate → marcará desconectado
-    });
+    // Intentar enviar datos pendientes primero
+    enviarPendientes();
+  }
 }
 
-// Chequear estado ESP32
-function checkConnection(){
-    const diff = Date.now()-lastESPUpdate;
-    if(diff<5000){
-        document.getElementById("status").innerHTML="ESP32 Conectado ✓";
-        document.getElementById("status").className="status-box ok";
+// Enviar todas las lecturas pendientes
+void enviarPendientes(){
+  if(WiFi.status() != WL_CONNECTED) return;
+  File file = SPIFFS.open("/pendientes.txt", FILE_READ);
+  if(!file) return;
+
+  String buffer;
+  while(file.available()){
+    String linea = file.readStringUntil('\n');
+    int idx1 = linea.indexOf(',');
+    int idx2 = linea.lastIndexOf(',');
+    if(idx1==-1 || idx2==-1) continue;
+
+    unsigned long t = linea.substring(0, idx1).toInt();
+    float co2 = linea.substring(idx1+1, idx2).toFloat();
+    float co  = linea.substring(idx2+1).toFloat();
+
+    if(enviarFirebase(co2, co, t)){ // solo eliminar si fue exitoso
+      continue;
     } else {
-        document.getElementById("status").innerHTML="ESP32 Desconectado ✗";
-        document.getElementById("status").className="status-box fail";
+      break; // si falla, detener para intentar después
     }
+  }
+  file.close();
+  SPIFFS.remove("/pendientes.txt");
 }
 
-// Función para graficar datos históricos
-function drawCharts(){
-    if(chartCO2) chartCO2.destroy();
-    if(chartCO) chartCO.destroy();
+// Modificar enviarFirebase para indicar éxito
+bool enviarFirebase(float co2, float co, unsigned long t){
+  if(WiFi.status() != WL_CONNECTED) return false;
 
-    chartCO2 = new Chart(ctxCO2,{type:'line',
-        data:{labels:historyData.map(d=>d.time), datasets:[{label:'CO2 (ppm)', data:historyData.map(d=>d.co2), borderColor:'lime', fill:false, tension:0.1}]},
-        options:{responsive:false, maintainAspectRatio:false, plugins:{legend:{labels:{color:'white'}}}, scales:{x:{ticks:{color:'white'}},y:{min:0,ticks:{color:'white'},beginAtZero:true}}}
-    });
+  HTTPClient http;
+  String url = firebaseHost + "sensores.json?auth=" + apiKey;
+  http.begin(url);
+  http.addHeader("Content-Type", "application/json");
 
-    chartCO = new Chart(ctxCO,{type:'line',
-        data:{labels:historyData.map(d=>d.time), datasets:[{label:'CO (ppm)', data:historyData.map(d=>d.co), borderColor:'yellow', fill:false, tension:0.1}]},
-        options:{responsive:false, maintainAspectRatio:false, plugins:{legend:{labels:{color:'white'}}}, scales:{x:{ticks:{color:'white'}},y:{min:0,ticks:{color:'white'},beginAtZero:true}}}
-    });
+  StaticJsonDocument<250> doc;
+  doc["co2"] = co2;
+  doc["co"] = co;
+  doc["last_update"] = t;
+  String json;
+  serializeJson(doc, json);
 
-    // Mostrar máximos y mínimos
-    if(historyData.length>0){
-        const co2Vals=historyData.map(d=>d.co2);
-        const coVals=historyData.map(d=>d.co);
-        document.getElementById("co2_min_max").innerText=`Máx: ${Math.max(...co2Vals).toFixed(1)} ppm, Mín: ${Math.min(...co2Vals).toFixed(1)} ppm`;
-        document.getElementById("co_min_max").innerText=`Máx: ${Math.max(...coVals).toFixed(1)} ppm, Mín: ${Math.min(...coVals).toFixed(1)} ppm`;
-    }
+  int code = http.PUT(json);
+  http.end();
+  return (code>=200 && code<300);
 }
-
-// Inicialización
-actualizar();
-setInterval(actualizar,2000);
-setInterval(checkConnection,1000);
-</script>
-
-</body>
-</html>
