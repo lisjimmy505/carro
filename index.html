@@ -23,7 +23,7 @@ button { margin-top: 20px; padding: 10px 30px; font-size: 20px; border: none; bo
 #startBtn { background: #FFDD33; }
 #stopBtn { background: #FF4C4C; color: black; }
 .chart-row { display: flex; justify-content: center; gap: 20px; margin-top: 20px; flex-wrap: wrap; }
-.chart-card { background: rgba(255, 255, 255, 0.1); padding: 10px; width: 1000px; border-radius: 12px; }
+.chart-card { background: rgba(255, 255, 255,0.1); padding: 10px; width: 1000px; border-radius: 12px; }
 canvas { width: 100% !important; height: 600px !important; }
 </style>
 </head>
@@ -68,7 +68,6 @@ const firebaseURL = "https://carro-f8554-default-rtdb.firebaseio.com/sensores.js
 let lastCO2 = null;
 let lastCO = null;
 let lastESPUpdate = 0;
-let lastFirebaseTime = 0;
 let collecting = false;
 let historyData = [];
 
@@ -77,48 +76,46 @@ let ctxCO = document.getElementById('chartCO').getContext('2d');
 let chartCO2 = null;
 let chartCO = null;
 
-// Botones
 document.getElementById("startBtn").onclick = () => {
-    collecting=true;
-    historyData=[];
-    if(chartCO2){chartCO2.destroy(); chartCO2=null;}
-    if(chartCO){chartCO.destroy(); chartCO=null;}
+    collecting = true;
+    historyData = [];
+    if(chartCO2){ chartCO2.destroy(); chartCO2=null; }
+    if(chartCO){ chartCO.destroy(); chartCO=null; }
 };
+
 document.getElementById("stopBtn").onclick = () => { collecting=false; drawCharts(); };
+
 document.getElementById("clearBtn").onclick = () => {
     document.getElementById("tabla_co2").innerHTML="";
     document.getElementById("tabla_co").innerHTML="";
     historyData=[];
 };
 
-// Función principal de actualización
+// Actualizar datos
 function actualizar() {
     fetch(firebaseURL)
     .then(res=>res.json())
     .then(data=>{
         if(!data) return;
 
-        // Si hay datos, actualizar la marca de tiempo de último contacto
         lastESPUpdate = Date.now();
 
         const co2 = parseFloat(data.co2);
         const co = parseFloat(data.co);
         const last_update = Number(data.last_update)||0;
-        lastFirebaseTime = last_update;
 
-        // Actualizar valores si cambian >10%
         if(lastCO2===null || Math.abs((co2-lastCO2)/lastCO2)>0.1){
             document.getElementById("co2_valor").innerText = co2.toFixed(1)+" ppm";
             let row="<tr><td>"+co2.toFixed(1)+"</td></tr>";
             document.getElementById("tabla_co2").innerHTML=row+document.getElementById("tabla_co2").innerHTML;
-            lastCO2=co2;
+            lastCO2 = co2;
         }
 
         if(lastCO===null || Math.abs((co-lastCO)/lastCO)>0.1){
             document.getElementById("co_valor").innerText = co.toFixed(1)+" ppm";
             let row="<tr><td>"+co.toFixed(1)+"</td></tr>";
             document.getElementById("tabla_co").innerHTML=row+document.getElementById("tabla_co").innerHTML;
-            lastCO=co;
+            lastCO = co;
         }
 
         if(collecting){
@@ -126,13 +123,10 @@ function actualizar() {
             historyData.push({time: timestamp, co2, co});
         }
     })
-    .catch(err=>{
-        console.log("Error al leer Firebase:", err);
-        // Si hay error al leer Firebase, no actualizar lastESPUpdate → marcará desconectado
-    });
+    .catch(err=>{ console.log("Error al leer Firebase:", err); });
 }
 
-// Chequear estado ESP32
+// Estado ESP32
 function checkConnection(){
     const diff = Date.now()-lastESPUpdate;
     if(diff<5000){
@@ -144,22 +138,23 @@ function checkConnection(){
     }
 }
 
-// Función para graficar datos históricos
+// Graficar
 function drawCharts(){
     if(chartCO2) chartCO2.destroy();
     if(chartCO) chartCO.destroy();
 
-    chartCO2 = new Chart(ctxCO2,{type:'line',
+    chartCO2 = new Chart(ctxCO2,{
+        type:'line',
         data:{labels:historyData.map(d=>d.time), datasets:[{label:'CO2 (ppm)', data:historyData.map(d=>d.co2), borderColor:'lime', fill:false, tension:0.1}]},
         options:{responsive:false, maintainAspectRatio:false, plugins:{legend:{labels:{color:'white'}}}, scales:{x:{ticks:{color:'white'}},y:{min:0,ticks:{color:'white'},beginAtZero:true}}}
     });
 
-    chartCO = new Chart(ctxCO,{type:'line',
+    chartCO = new Chart(ctxCO,{
+        type:'line',
         data:{labels:historyData.map(d=>d.time), datasets:[{label:'CO (ppm)', data:historyData.map(d=>d.co), borderColor:'yellow', fill:false, tension:0.1}]},
         options:{responsive:false, maintainAspectRatio:false, plugins:{legend:{labels:{color:'white'}}}, scales:{x:{ticks:{color:'white'}},y:{min:0,ticks:{color:'white'},beginAtZero:true}}}
     });
 
-    // Mostrar máximos y mínimos
     if(historyData.length>0){
         const co2Vals=historyData.map(d=>d.co2);
         const coVals=historyData.map(d=>d.co);
@@ -168,7 +163,7 @@ function drawCharts(){
     }
 }
 
-// Inicialización
+// Inicializar
 actualizar();
 setInterval(actualizar,2000);
 setInterval(checkConnection,1000);
