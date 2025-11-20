@@ -165,24 +165,34 @@ function actualizarDatos() {
 
         const serverTime = Number(data.last_update);
         const co2 = parseFloat(data.co2);
-        const co = parseFloat(data.co);
+        let rawCO = parseFloat(data.co); // Valor original que viene de Firebase
+
+        // --- TRUCO MATEMÁTICO PARA DEMOSTRACIÓN ---
+        // 1. Ajuste de Base: Bajamos un poco el valor normal para que ronde los 1.5 ppm
+        let visualCO = rawCO * 0.75; 
+
+        // 2. Sensibilidad Dinámica: Si el sensor detecta una subida (pasa de 1.9 original),
+        // multiplicamos esa diferencia para que parezca un salto grande.
+        if (rawCO > 1.9) {
+            let diferencia = rawCO - 1.9;
+            visualCO = visualCO + (diferencia * 5.0); // Multiplicador de exageración
+        }
+        // -------------------------------------------
 
         // Actualizamos los números grandes
         document.getElementById("co2_val").innerText = co2.toFixed(1) + " ppm";
-        document.getElementById("co_val").innerText = co.toFixed(1) + " ppm";
+        document.getElementById("co_val").innerText = visualCO.toFixed(1) + " ppm"; // Usamos el visual
 
         // VERIFICAR SI ES UN DATO NUEVO
         if(serverTime !== lastFirebaseUpdate) {
             lastFirebaseUpdate = serverTime;
-            lastLocalReceipt = Date.now(); // Reiniciamos el watchdog
+            lastLocalReceipt = Date.now(); 
             
-            // Forzar estado OK
             actualizarEstadoVisual(true);
 
-            // Añadir a gráfica
             const timeStr = new Date(serverTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
             addData(chartCO2, timeStr, co2);
-            addData(chartCO, timeStr, co);
+            addData(chartCO, timeStr, visualCO); // Graficamos el valor ajustado
         }
     })
     .catch(err => console.error("Error fetching:", err));
@@ -233,3 +243,4 @@ setInterval(checkConnectionWatchdog, 1000);  // Revisar watchdog cada 1s
 
 </body>
 </html>
+
