@@ -165,12 +165,10 @@ function actualizarDatos() {
         if(!data) return;
 
         const serverTime = Number(data.last_update);
-        const co2 = 0; // MODIFICADO: Siempre marca 0
-        let rawCO = parseFloat(data.co); // Valor original que viene de Firebase
+        const co2 = 0; // FORZADO A 0: Ignoramos lo que venga de Firebase para MQ135
+        let rawCO = parseFloat(data.co); 
 
-        // --- TRUCO MATEMÁTICO PARA DEMOSTRACIÓN ---
-        // Se mantiene la lógica visual del HTML, aunque el ESP ya envía datos calibrados.
-        // Esto ayuda a suavizar aún más la visualización si hay ruido.
+        // --- TRUCO MATEMÁTICO PARA DEMOSTRACIÓN MQ9 ---
         let visualCO = rawCO * 0.75; 
 
         if (rawCO > 1.9) {
@@ -191,7 +189,7 @@ function actualizarDatos() {
             actualizarEstadoVisual(true);
 
             const timeStr = new Date(serverTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-            addData(chartCO2, timeStr, co2);
+            addData(chartCO2, timeStr, co2); // Se grafica 0
             addData(chartCO, timeStr, visualCO); 
         }
     })
