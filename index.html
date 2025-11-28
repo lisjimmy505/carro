@@ -1,245 +1,248 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<title>Monitor Calidad del Aire IoT</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import Chart from 'chart.js/auto';
+import { Cloud, Zap } from 'lucide-react';
 
-<style>
-body {
-    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-    background: #1e1e2f;
-    color: #e0e0e0;
-    text-align: center;
-    margin: 0; padding: 20px;
-}
+// --- CONFIGURACIÓN DE FIREBASE (Requerido por el entorno) ---
+// Aunque usamos la URL directa de RTDB para la lectura (como en el código original),
+// la configuración base de Firebase y la autenticación son necesarias.
+// NOTA: Reemplaza esta URL con la tuya real.
+const DB_URL = "https://carro-f8554-default-rtdb.firebaseio.com/";
 
-h1 { margin-bottom: 10px; font-weight: 300; letter-spacing: 1px; }
+const App = () => {
+  // Estado de los valores
+  const [co2Value, setCo2Value] = useState(null);
+  const [coValue, setCoValue] = useState(null);
+  const [isConnected, setIsConnected] = useState(false);
+  const [isAuthReady, setIsAuthReady] = useState(false);
 
-/* --- ESTADO CONEXIÓN --- */
-.status-box { 
-    display: inline-block; 
-    padding: 8px 25px; 
-    border-radius: 20px; 
-    font-size: 16px; 
-    font-weight: bold;
-    margin-bottom: 30px;
-    transition: all 0.3s;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-}
-.ok { background: rgba(0, 210, 91, 0.2); color: #00d25b; border: 1px solid #00d25b; }
-.fail { background: rgba(253, 93, 147, 0.2); color: #fd5d93; border: 1px solid #fd5d93; }
+  // Control del Watchdog y la gráfica
+  const lastFirebaseUpdate = useRef(0);
+  const lastLocalReceipt = useRef(Date.now());
+  const chartCO2Ref = useRef(null);
+  const chartCORef = useRef(null);
 
-/* --- CONTENEDOR GRÁFICAS --- */
-.charts-row {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 30px;
-    margin-top: 20px;
-}
+  // Inicialización de Firebase (Adaptado a las reglas del entorno)
+  useEffect(() => {
+    // Estas variables son provistas automáticamente por el entorno de Canvas
+    const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+    const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
-.chart-card {
-    background: #27293d;
-    padding: 25px;
-    border-radius: 15px;
-    width: 45%;
-    min-width: 350px;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-    border: 1px solid #3d3f53;
-}
+    if (firebaseConfig) {
+        // Importaciones de Firebase para autenticación
+        import('firebase/app').then(module => {
+            const { initializeApp } = module;
+            const app = initializeApp(firebaseConfig);
 
-h3 { margin-top: 0; color: #9a9a9a; font-size: 1.2rem; }
+            import('firebase/auth').then(authModule => {
+                const { getAuth, signInAnonymously, signInWithCustomToken } = authModule;
+                const auth = getAuth(app);
 
-.value-display {
-    font-size: 42px;
-    font-weight: bold;
-    margin: 15px 0;
-    text-shadow: 0 2px 4px rgba(0,0,0,0.5);
-}
-
-/* Colores de texto para valores */
-.text-co2 { color: #00d25b; } /* Verde Neon */
-.text-co { color: #ff8d72; }  /* Naranja/Coral */
-
-canvas {
-    width: 100% !important;
-    height: 300px !important;
-    margin-top: 10px;
-}
-</style>
-</head>
-
-<body>
-
-<h1>Monitor de Gases en Tiempo Real</h1>
-<div id="status" class="status-box fail">Esperando datos...</div>
-
-<div class="charts-row">
-    <div class="chart-card">
-        <h3>MQ135 (CO₂)</h3>
-        <div id="co2_val" class="value-display text-co2">--- ppm</div>
-        <canvas id="chartCO2"></canvas>
-    </div>
-
-    <div class="chart-card">
-        <h3>MQ9 (CO)</h3>
-        <div id="co_val" class="value-display text-co">--- ppm</div>
-        <canvas id="chartCO"></canvas>
-    </div>
-</div>
-
-<script>
-// ---------------- CONFIGURACIÓN ----------------
-const dbUrl = "https://carro-f8554-default-rtdb.firebaseio.com/";
-
-// Variables de control de conexión (Watchdog)
-let lastFirebaseUpdate = 0; // Timestamp que viene de Firebase
-let lastLocalReceipt = Date.now(); // Hora local de la última recepción válida
-
-// ---------------- CONFIGURACIÓN GRÁFICAS ----------------
-// Gráfica CO2 (Verde)
-const ctxCO2 = document.getElementById('chartCO2').getContext('2d');
-const chartCO2 = new Chart(ctxCO2, {
-    type: 'line',
-    data: {
-        labels: [],
-        datasets: [{
-            label: 'CO₂ (ppm)',
-            borderColor: '#00d25b',
-            backgroundColor: 'rgba(0, 210, 91, 0.1)',
-            borderWidth: 2,
-            pointRadius: 3,
-            pointHoverRadius: 6,
-            fill: true,
-            data: [],
-            tension: 0.3
-        }]
-    },
-    options: { 
-        responsive: true, 
-        maintainAspectRatio: false, 
-        plugins: { legend: { display: false } }, // Ocultamos leyenda pequeña
-        scales: { 
-            x: { grid: { color: '#3d3f53' }, ticks: { color: '#9a9a9a' } },
-            y: { beginAtZero: true, grid: { color: '#3d3f53' }, ticks: { color: '#9a9a9a' } } 
-        } 
+                // Autenticación requerida por las reglas del entorno
+                const signIn = async () => {
+                    try {
+                        if (initialAuthToken) {
+                            await signInWithCustomToken(auth, initialAuthToken);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                        setIsAuthReady(true);
+                    } catch (error) {
+                        console.error("Error de autenticación de Firebase:", error);
+                        setIsAuthReady(true); // Permitir que la UI cargue incluso si falla la auth
+                    }
+                };
+                signIn();
+            });
+        }).catch(err => {
+            console.error("Error al cargar módulos de Firebase:", err);
+            setIsAuthReady(true);
+        });
+    } else {
+        setIsAuthReady(true); // Si no hay config, asumir listo para continuar con el fetch directo
     }
-});
+  }, []);
 
-// Gráfica CO (Naranja)
-const ctxCO = document.getElementById('chartCO').getContext('2d');
-const chartCO = new Chart(ctxCO, {
-    type: 'line',
-    data: {
-        labels: [],
-        datasets: [{
-            label: 'CO (ppm)',
-            borderColor: '#ff8d72',
-            backgroundColor: 'rgba(255, 141, 114, 0.1)',
-            borderWidth: 2,
-            pointRadius: 3,
-            pointHoverRadius: 6,
-            fill: true,
-            data: [],
-            tension: 0.3
-        }]
-    },
-    options: { 
-        responsive: true, 
-        maintainAspectRatio: false, 
-        plugins: { legend: { display: false } },
-        scales: { 
-            x: { grid: { color: '#3d3f53' }, ticks: { color: '#9a9a9a' } },
-            y: { beginAtZero: true, grid: { color: '#3d3f53' }, ticks: { color: '#9a9a9a' } } 
-        } 
-    }
-});
+  // Función para inicializar Chart.js
+  const initCharts = useCallback(() => {
+    const ctxCO2 = document.getElementById('chartCO2').getContext('2d');
+    const ctxCO = document.getElementById('chartCO').getContext('2d');
 
-// ---------------- LÓGICA DE ACTUALIZACIÓN ----------------
-function actualizarDatos() {
-    fetch(dbUrl + "sensores.json")
-    .then(res => res.json())
-    .then(data => {
-        if(!data) return;
+    const chartOptions = {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: 'rgba(255, 255, 255, 0.1)' }, ticks: { color: '#e0e0e0' } },
+        y: { beginAtZero: true, grid: { color: 'rgba(255, 255, 255, 0.1)' }, ticks: { color: '#e0e0e0' } }
+      }
+    };
 
-        const serverTime = Number(data.last_update);
-        const co2 = parseFloat(data.co2);
-        let rawCO = parseFloat(data.co); // Valor original que viene de Firebase
+    chartCO2Ref.current = new Chart(ctxCO2, {
+      type: 'line',
+      data: { labels: [], datasets: [{ label: 'CO₂ (ppm)', borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.2)', borderWidth: 2, pointRadius: 3, fill: true, data: [], tension: 0.3 }] },
+      options: chartOptions,
+    });
 
-        // --- TRUCO MATEMÁTICO PARA DEMOSTRACIÓN ---
-        // 1. Ajuste de Base: Bajamos un poco el valor normal para que ronde los 1.5 ppm
-        let visualCO = rawCO * 0.75; 
+    chartCORef.current = new Chart(ctxCO, {
+      type: 'line',
+      data: { labels: [], datasets: [{ label: 'CO (ppm)', borderColor: '#f97316', backgroundColor: 'rgba(249, 115, 22, 0.2)', borderWidth: 2, pointRadius: 3, fill: true, data: [], tension: 0.3 }] },
+      options: chartOptions,
+    });
+  }, []);
 
-        // 2. Sensibilidad Dinámica: Si el sensor detecta una subida (pasa de 1.9 original),
-        // multiplicamos esa diferencia para que parezca un salto grande.
-        if (rawCO > 1.9) {
-            let diferencia = rawCO - 1.9;
-            visualCO = visualCO + (diferencia * 5.0); // Multiplicador de exageración
-        }
-        // -------------------------------------------
+  // Hook para inicializar las gráficas
+  useEffect(() => {
+    initCharts();
+    return () => {
+      chartCO2Ref.current?.destroy();
+      chartCORef.current?.destroy();
+    };
+  }, [initCharts]);
 
-        // Actualizamos los números grandes
-        document.getElementById("co2_val").innerText = co2.toFixed(1) + " ppm";
-        document.getElementById("co_val").innerText = visualCO.toFixed(1) + " ppm"; // Usamos el visual
-
-        // VERIFICAR SI ES UN DATO NUEVO
-        if(serverTime !== lastFirebaseUpdate) {
-            lastFirebaseUpdate = serverTime;
-            lastLocalReceipt = Date.now(); 
-            
-            actualizarEstadoVisual(true);
-
-            const timeStr = new Date(serverTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-            addData(chartCO2, timeStr, co2);
-            addData(chartCO, timeStr, visualCO); // Graficamos el valor ajustado
-        }
-    })
-    .catch(err => console.error("Error fetching:", err));
-}
-
-// Función para añadir datos y limitar a 15 puntos
-function addData(chart, label, data) {
+  // Función para añadir datos y limitar a 15 puntos
+  const addData = useCallback((chart, label, data) => {
+    if (!chart) return;
     chart.data.labels.push(label);
     chart.data.datasets.forEach((dataset) => {
-        dataset.data.push(data);
+      dataset.data.push(data);
     });
-    if (chart.data.labels.length > 15) {
-        chart.data.labels.shift();
-        chart.data.datasets.forEach((dataset) => {
-            dataset.data.shift();
-        });
+    const limit = 15;
+    if (chart.data.labels.length > limit) {
+      chart.data.labels.shift();
+      chart.data.datasets.forEach((dataset) => {
+        dataset.data.shift();
+      });
     }
     chart.update();
-}
+  }, []);
 
-function actualizarEstadoVisual(conectado) {
-    const statusDiv = document.getElementById("status");
-    if (conectado) {
-        statusDiv.className = "status-box ok";
-        statusDiv.innerText = "ESP32 Conectado 🟢";
-    } else {
-        statusDiv.className = "status-box fail";
-        statusDiv.innerText = "ESP32 Desconectado 🔴";
+  // Función principal de actualización de datos
+  const actualizarDatos = useCallback(async () => {
+    try {
+      const response = await fetch(DB_URL + "sensores.json");
+      if (!response.ok) throw new Error("Error al obtener datos de Firebase.");
+      const data = await response.json();
+
+      if (!data) return;
+
+      const serverTime = Number(data.last_update);
+      const co2 = parseFloat(data.co2);
+      const rawCO = parseFloat(data.co);
+
+      // Aplicar la fórmula matemática de demostración (manteniendo la lógica original)
+      let visualCO = rawCO * 0.75;
+      if (rawCO > 1.9) {
+        let diferencia = rawCO - 1.9;
+        visualCO = visualCO + (diferencia * 5.0);
+      }
+
+      setCo2Value(co2.toFixed(1));
+      setCoValue(visualCO.toFixed(1));
+
+      // Verificar si es un dato NUEVO
+      if (serverTime !== lastFirebaseUpdate.current && !isNaN(co2) && !isNaN(visualCO)) {
+        lastFirebaseUpdate.current = serverTime;
+        lastLocalReceipt.current = Date.now();
+        setIsConnected(true);
+
+        const timeStr = new Date(serverTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        addData(chartCO2Ref.current, timeStr, co2);
+        addData(chartCORef.current, timeStr, visualCO);
+      }
+    } catch (err) {
+      console.error("Error al actualizar datos:", err);
+      // Mantener isConnected como está, ya que un error de fetch no implica necesariamente desconexión del ESP32
     }
-}
+  }, [addData]);
 
-// ---------------- WATCHDOG DE CONEXIÓN ----------------
-// Revisa independientemente cada 1 segundo si el último dato es reciente
-function checkConnectionWatchdog() {
-    const now = Date.now();
-    // Umbral de 10 segundos (10000ms)
-    if (now - lastLocalReceipt > 10000) {
-        actualizarEstadoVisual(false);
-    } else {
-        actualizarEstadoVisual(true);
-    }
-}
+  // Watchdog de conexión
+  useEffect(() => {
+    // 1. Intervalo de consulta de datos (cada 2s)
+    const dataInterval = setInterval(actualizarDatos, 2000);
 
-// Intervalos
-setInterval(actualizarDatos, 2000);       // Consultar Firebase cada 2s
-setInterval(checkConnectionWatchdog, 1000);  // Revisar watchdog cada 1s
-</script>
+    // 2. Intervalo del Watchdog (cada 1s)
+    const watchdogInterval = setInterval(() => {
+      const now = Date.now();
+      // Si el último dato recibido localmente es más viejo de 10 segundos
+      if (now - lastLocalReceipt.current > 10000) {
+        setIsConnected(false);
+      } else {
+        // Solo actualizar a true si ya había datos nuevos
+        if (lastFirebaseUpdate.current !== 0) {
+            setIsConnected(true);
+        }
+      }
+    }, 1000);
 
-</body>
-</html>
+    return () => {
+      clearInterval(dataInterval);
+      clearInterval(watchdogInterval);
+    };
+  }, [actualizarDatos]);
+
+
+  const StatusBox = () => (
+    <div
+      className={`inline-flex items-center space-x-2 px-6 py-2 rounded-full font-semibold text-lg transition-all duration-300 shadow-lg ${
+        isConnected
+          ? 'bg-green-700/20 text-green-400 border border-green-700'
+          : 'bg-red-700/20 text-red-400 border border-red-700'
+      }`}
+    >
+      <Zap className={`h-5 w-5 ${isConnected ? 'animate-pulse' : ''}`} />
+      <span>{isConnected ? "ESP32 Conectado 🟢" : "ESP32 Desconectado 🔴"}</span>
+    </div>
+  );
+
+  const ChartCard = ({ title, value, unit, canvasId, colorClass, icon: Icon }) => (
+    <div className="bg-gray-800 p-6 rounded-2xl shadow-xl border border-gray-700 w-full lg:w-[48%] min-w-[300px] flex flex-col transition-transform hover:shadow-2xl hover:border-indigo-500">
+      <div className="flex justify-between items-start mb-4">
+        <h3 className="text-xl font-medium text-gray-400 flex items-center space-x-2">
+            <Icon className="w-5 h-5 text-indigo-400" />
+            <span>{title}</span>
+        </h3>
+      </div>
+      <div className="flex-grow">
+          <div className={`text-6xl font-extrabold ${colorClass} mb-4 drop-shadow-md`}>
+            {value === null ? "---" : value} <span className="text-2xl font-light opacity-70 ml-1">{unit}</span>
+          </div>
+          <div className="h-64 mt-4">
+            <canvas id={canvasId}></canvas>
+          </div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-gray-900 text-white p-4 md:p-10 font-sans">
+      <header className="text-center mb-8">
+        <h1 className="text-4xl font-light mb-2 tracking-wider text-indigo-400">
+          Monitor de Calidad del Aire IoT
+        </h1>
+        <p className="text-gray-500 mb-6">Visualización en tiempo real de datos del sensor MQ.</p>
+        <StatusBox />
+      </header>
+
+      <main className="flex flex-wrap justify-center gap-6">
+        <ChartCard
+          title="MQ135 (Dióxido de Carbono)"
+          value={co2Value}
+          unit="ppm"
+          canvasId="chartCO2"
+          colorClass="text-green-400"
+          icon={Cloud}
+        />
+        <ChartCard
+          title="MQ9 (Monóxido de Carbono)"
+          value={coValue}
+          unit="ppm"
+          canvasId="chartCO"
+          colorClass="text-orange-400"
+          icon={Zap}
+        />
+      </main>
+    </div>
+  );
+};
+
+export default App;
