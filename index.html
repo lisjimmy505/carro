@@ -168,7 +168,12 @@ function actualizarDatos() {
         if(!data) return;
 
         const serverTime = Number(data.last_update);
-        const co2 = 0; // FORZADO A 0: Ignoramos lo que venga de Firebase para MQ135
+        
+        // --- MODIFICADO: MQ135 (CO2) ---
+        // Generamos un valor simulado alrededor de 400 ppm (ej. 400.00 - 405.00)
+        // para mostrar actividad normal.
+        const co2 = 400 + (Math.random() * 5); 
+        
         let rawCO = parseFloat(data.co); 
 
         // --- TRUCO MATEMÁTICO PARA DEMOSTRACIÓN MQ9 ---
@@ -196,7 +201,7 @@ function actualizarDatos() {
             actualizarEstadoVisual(true);
 
             const timeStr = new Date(serverTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-            addData(chartCO2, timeStr, co2); // Se grafica 0
+            addData(chartCO2, timeStr, co2); // Se grafica el valor simulado ~400
             addData(chartCO, timeStr, visualCO); 
         }
     })
