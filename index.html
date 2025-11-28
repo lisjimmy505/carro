@@ -186,6 +186,7 @@ function actualizarDatos() {
             lastFirebaseUpdate = serverTime;
             lastLocalReceipt = Date.now(); 
             
+            // Aquí confirmamos la conexión porque acaba de llegar un dato nuevo
             actualizarEstadoVisual(true);
 
             const timeStr = new Date(serverTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -227,11 +228,13 @@ function actualizarEstadoVisual(conectado) {
 function checkConnectionWatchdog() {
     const now = Date.now();
     // Umbral de 10 segundos sin datos nuevos
+    // Si han pasado más de 10 segundos desde 'lastLocalReceipt', marcamos Desconectado.
     if (now - lastLocalReceipt > 10000) {
         actualizarEstadoVisual(false);
-    } else {
-        actualizarEstadoVisual(true);
     }
+    // NOTA: Eliminamos el 'else { actualizarEstadoVisual(true) }' para que el watchdog
+    // no fuerce el estado a conectado repetidamente. El estado 'Conectado' solo debe
+    // activarse en el evento de recepción de datos (arriba en actualizarDatos).
 }
 
 // Intervalos
