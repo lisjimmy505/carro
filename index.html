@@ -2,7 +2,6 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Monitor Calidad del Aire IoT</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
@@ -31,16 +30,6 @@ h1 { margin-bottom: 10px; font-weight: 300; letter-spacing: 1px; }
 .ok { background: rgba(0, 210, 91, 0.2); color: #00d25b; border: 1px solid #00d25b; }
 .fail { background: rgba(253, 93, 147, 0.2); color: #fd5d93; border: 1px solid #fd5d93; }
 
-/* Animación de parpadeo cuando llegan datos */
-@keyframes ping {
-    0% { transform: scale(1); opacity: 1; }
-    50% { transform: scale(1.05); opacity: 0.8; }
-    100% { transform: scale(1); opacity: 1; }
-}
-.ping-effect {
-    animation: ping 0.2s ease-in-out;
-}
-
 /* --- CONTENEDOR GRÁFICAS --- */
 .charts-row {
     display: flex;
@@ -54,8 +43,8 @@ h1 { margin-bottom: 10px; font-weight: 300; letter-spacing: 1px; }
     background: #27293d;
     padding: 25px;
     border-radius: 15px;
-    width: 100%;
-    max-width: 500px; /* Mejor control de ancho en escritorio */
+    width: 45%;
+    min-width: 350px;
     box-shadow: 0 4px 15px rgba(0,0,0,0.3);
     border: 1px solid #3d3f53;
 }
@@ -69,6 +58,7 @@ h3 { margin-top: 0; color: #9a9a9a; font-size: 1.2rem; }
     text-shadow: 0 2px 4px rgba(0,0,0,0.5);
 }
 
+/* Colores de texto para valores */
 .text-co2 { color: #00d25b; } /* Verde Neon */
 .text-co { color: #ff8d72; }  /* Naranja/Coral */
 
@@ -104,21 +94,11 @@ canvas {
 const dbUrl = "https://carro-f8554-default-rtdb.firebaseio.com/";
 
 // Variables de control de conexión (Watchdog)
-let lastReceivedTime = 0; 
-const TIMEOUT_MS = 12000; // 12 segundos de tolerancia antes de marcar desconectado
+let lastFirebaseUpdate = 0; // Timestamp que viene de Firebase
+let lastLocalReceipt = Date.now(); // Hora local de la última recepción válida
 
 // ---------------- CONFIGURACIÓN GRÁFICAS ----------------
-const commonOptions = { 
-    responsive: true, 
-    maintainAspectRatio: false, 
-    plugins: { legend: { display: false } }, 
-    scales: { 
-        x: { grid: { color: '#3d3f53' }, ticks: { color: '#9a9a9a' } },
-        y: { beginAtZero: true, grid: { color: '#3d3f53' }, ticks: { color: '#9a9a9a' } } 
-    } 
-};
-
-// Gráfica CO2
+// Gráfica CO2 (Verde)
 const ctxCO2 = document.getElementById('chartCO2').getContext('2d');
 const chartCO2 = new Chart(ctxCO2, {
     type: 'line',
@@ -130,15 +110,24 @@ const chartCO2 = new Chart(ctxCO2, {
             backgroundColor: 'rgba(0, 210, 91, 0.1)',
             borderWidth: 2,
             pointRadius: 3,
+            pointHoverRadius: 6,
             fill: true,
             data: [],
             tension: 0.3
         }]
     },
-    options: commonOptions
+    options: { 
+        responsive: true, 
+        maintainAspectRatio: false, 
+        plugins: { legend: { display: false } }, // Ocultamos leyenda pequeña
+        scales: { 
+            x: { grid: { color: '#3d3f53' }, ticks: { color: '#9a9a9a' } },
+            y: { beginAtZero: true, grid: { color: '#3d3f53' }, ticks: { color: '#9a9a9a' } } 
+        } 
+    }
 });
 
-// Gráfica CO
+// Gráfica CO (Naranja)
 const ctxCO = document.getElementById('chartCO').getContext('2d');
 const chartCO = new Chart(ctxCO, {
     type: 'line',
@@ -150,68 +139,71 @@ const chartCO = new Chart(ctxCO, {
             backgroundColor: 'rgba(255, 141, 114, 0.1)',
             borderWidth: 2,
             pointRadius: 3,
+            pointHoverRadius: 6,
             fill: true,
             data: [],
             tension: 0.3
         }]
     },
-    options: commonOptions
+    options: { 
+        responsive: true, 
+        maintainAspectRatio: false, 
+        plugins: { legend: { display: false } },
+        scales: { 
+            x: { grid: { color: '#3d3f53' }, ticks: { color: '#9a9a9a' } },
+            y: { beginAtZero: true, grid: { color: '#3d3f53' }, ticks: { color: '#9a9a9a' } } 
+        } 
+    }
 });
 
 // ---------------- LÓGICA DE ACTUALIZACIÓN ----------------
-let previousUpdateTime = 0;
-
 function actualizarDatos() {
-    // Agregamos un timestamp a la URL para evitar cache del navegador (?t=...)
-    fetch(dbUrl + "sensores.json?t=" + Date.now())
+    fetch(dbUrl + "sensores.json")
     .then(res => res.json())
     .then(data => {
         if(!data) return;
 
         const serverTime = Number(data.last_update);
-        
-        // Verificamos si el dato es realmente nuevo comparando con la última vez
-        if (serverTime !== previousUpdateTime) {
-            previousUpdateTime = serverTime;
-            lastReceivedTime = Date.now(); // Marcamos que acabamos de recibir algo válido
+        const co2 = parseFloat(data.co2);
+        let rawCO = parseFloat(data.co); // Valor original que viene de Firebase
+
+        // --- TRUCO MATEMÁTICO PARA DEMOSTRACIÓN ---
+        // 1. Ajuste de Base: Bajamos un poco el valor normal para que ronde los 1.5 ppm
+        let visualCO = rawCO * 0.75; 
+
+        // 2. Sensibilidad Dinámica: Si el sensor detecta una subida (pasa de 1.9 original),
+        // multiplicamos esa diferencia para que parezca un salto grande.
+        if (rawCO > 1.9) {
+            let diferencia = rawCO - 1.9;
+            visualCO = visualCO + (diferencia * 5.0); // Multiplicador de exageración
+        }
+        // -------------------------------------------
+
+        // Actualizamos los números grandes
+        document.getElementById("co2_val").innerText = co2.toFixed(1) + " ppm";
+        document.getElementById("co_val").innerText = visualCO.toFixed(1) + " ppm"; // Usamos el visual
+
+        // VERIFICAR SI ES UN DATO NUEVO
+        if(serverTime !== lastFirebaseUpdate) {
+            lastFirebaseUpdate = serverTime;
+            lastLocalReceipt = Date.now(); 
             
-            // Efecto visual de "Ping"
-            triggerPingEffect();
+            actualizarEstadoVisual(true);
 
-            // Procesar valores
-            const co2 = parseFloat(data.co2);
-            let rawCO = parseFloat(data.co); 
-            
-            // --- Tu lógica de ajuste visual ---
-            let visualCO = rawCO * 0.75; 
-            if (rawCO > 1.9) {
-                let diferencia = rawCO - 1.9;
-                visualCO = visualCO + (diferencia * 5.0); 
-            }
-            // ----------------------------------
-
-            // Actualizar DOM
-            document.getElementById("co2_val").innerText = co2.toFixed(1) + " ppm";
-            document.getElementById("co_val").innerText = visualCO.toFixed(1) + " ppm";
-
-            // Actualizar gráficas
             const timeStr = new Date(serverTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
             addData(chartCO2, timeStr, co2);
-            addData(chartCO, timeStr, visualCO);
+            addData(chartCO, timeStr, visualCO); // Graficamos el valor ajustado
         }
-        
-        // Ejecutamos validación de estado inmediatamente después de recibir datos
-        actualizarEstadoVisual();
     })
     .catch(err => console.error("Error fetching:", err));
 }
 
+// Función para añadir datos y limitar a 15 puntos
 function addData(chart, label, data) {
     chart.data.labels.push(label);
     chart.data.datasets.forEach((dataset) => {
         dataset.data.push(data);
     });
-    // Mantenemos solo 15 puntos para que la gráfica corra suave
     if (chart.data.labels.length > 15) {
         chart.data.labels.shift();
         chart.data.datasets.forEach((dataset) => {
@@ -221,38 +213,32 @@ function addData(chart, label, data) {
     chart.update();
 }
 
-function triggerPingEffect() {
+function actualizarEstadoVisual(conectado) {
     const statusDiv = document.getElementById("status");
-    statusDiv.classList.remove("ping-effect");
-    void statusDiv.offsetWidth; // trigger reflow
-    statusDiv.classList.add("ping-effect");
+    if (conectado) {
+        statusDiv.className = "status-box ok";
+        statusDiv.innerText = "ESP32 Conectado 🟢";
+    } else {
+        statusDiv.className = "status-box fail";
+        statusDiv.innerText = "ESP32 Desconectado 🔴";
+    }
 }
 
-function actualizarEstadoVisual() {
-    const statusDiv = document.getElementById("status");
+// ---------------- WATCHDOG DE CONEXIÓN ----------------
+// Revisa independientemente cada 1 segundo si el último dato es reciente
+function checkConnectionWatchdog() {
     const now = Date.now();
-    const diff = now - lastReceivedTime;
-
-    // Si la diferencia entre ahora y el último dato recibido es menor al Timeout
-    if (diff < TIMEOUT_MS && lastReceivedTime !== 0) {
-        if (statusDiv.innerText !== "ESP32 Conectado 🟢") {
-            statusDiv.className = "status-box ok";
-            statusDiv.innerText = "ESP32 Conectado 🟢";
-        }
+    // Umbral de 10 segundos (10000ms)
+    if (now - lastLocalReceipt > 10000) {
+        actualizarEstadoVisual(false);
     } else {
-        if (statusDiv.innerText !== "ESP32 Desconectado 🔴") {
-            statusDiv.className = "status-box fail";
-            statusDiv.innerText = "ESP32 Desconectado 🔴";
-        }
+        actualizarEstadoVisual(true);
     }
 }
 
 // Intervalos
-// Verificamos estado cada 1 segundo (Watchdog local)
-setInterval(actualizarEstadoVisual, 1000); 
-// Pedimos datos a Firebase cada 2 segundos
-setInterval(actualizarDatos, 2000); 
-
+setInterval(actualizarDatos, 2000);       // Consultar Firebase cada 2s
+setInterval(checkConnectionWatchdog, 1000);  // Revisar watchdog cada 1s
 </script>
 
 </body>
