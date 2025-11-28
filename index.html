@@ -160,7 +160,9 @@ const chartCO = new Chart(ctxCO, {
 // ---------------- LÓGICA DE ACTUALIZACIÓN ----------------
 function actualizarDatos() {
     // Consulta a la base de datos de Firebase
-    fetch(dbUrl + "sensores.json")
+    // MODIFICADO: Agregamos ?nocache=timestamp para evitar que el navegador guarde la respuesta
+    // y siempre obtenga el dato más reciente.
+    fetch(dbUrl + "sensores.json?nocache=" + new Date().getTime())
     .then(res => res.json())
     .then(data => {
         if(!data) return;
@@ -183,13 +185,14 @@ function actualizarDatos() {
         document.getElementById("co_val").innerText = visualCO.toFixed(1) + " ppm"; 
 
         // VERIFICAR SI ES UN DATO NUEVO
-        // Condición mejorada: Si cambia la hora O si cambia el valor de CO
-        if(serverTime !== lastFirebaseUpdate || Math.abs(rawCO - lastCO) > 0.001) {
+        // Si la hora del servidor es diferente a la última guardada, 
+        // significa que el ESP32 envió un nuevo paquete.
+        if(serverTime !== lastFirebaseUpdate) {
             lastFirebaseUpdate = serverTime;
             lastCO = rawCO;
             lastLocalReceipt = Date.now(); 
             
-            // Aquí confirmamos la conexión porque acaba de llegar un dato nuevo
+            // Dato nuevo confirmado -> Estado OK
             actualizarEstadoVisual(true);
 
             const timeStr = new Date(serverTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -197,7 +200,11 @@ function actualizarDatos() {
             addData(chartCO, timeStr, visualCO); 
         }
     })
-    .catch(err => console.error("Error fetching:", err));
+    .catch(err => {
+        console.error("Error fetching:", err);
+        // Opcional: Si hay error de red real, podríamos marcar desconectado aquí también
+        // pero dejaremos que el watchdog lo maneje por tiempo.
+    });
 }
 
 // Función para añadir datos y limitar a 50 puntos
@@ -230,7 +237,8 @@ function actualizarEstadoVisual(conectado) {
 // ---------------- WATCHDOG DE CONEXIÓN ----------------
 function checkConnectionWatchdog() {
     const now = Date.now();
-    // Umbral aumentado a 15 segundos para evitar parpadeos si la red es lenta
+    // Si han pasado más de 15 segundos sin recibir un dato NUEVO (timestamp distinto),
+    // marcamos como desconectado.
     if (now - lastLocalReceipt > 15000) {
         actualizarEstadoVisual(false);
     }
