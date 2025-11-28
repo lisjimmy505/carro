@@ -165,7 +165,7 @@ function actualizarDatos() {
         if(!data) return;
 
         const serverTime = Number(data.last_update);
-        const co2 = parseFloat(data.co2);
+        const co2 = 0; // MODIFICADO: Siempre marca 0
         let rawCO = parseFloat(data.co); // Valor original que viene de Firebase
 
         // --- TRUCO MATEMÁTICO PARA DEMOSTRACIÓN ---
