@@ -95,6 +95,7 @@ const dbUrl = "https://carro-f8554-default-rtdb.firebaseio.com/";
 
 // Variables de control de conexión (Watchdog)
 let lastFirebaseUpdate = 0; // Timestamp que viene de Firebase
+let lastCO = -999;          // Último valor de CO recibido para verificar cambios
 let lastLocalReceipt = Date.now(); // Hora local de la última recepción válida
 
 // ---------------- CONFIGURACIÓN GRÁFICAS ----------------
@@ -182,8 +183,10 @@ function actualizarDatos() {
         document.getElementById("co_val").innerText = visualCO.toFixed(1) + " ppm"; 
 
         // VERIFICAR SI ES UN DATO NUEVO
-        if(serverTime !== lastFirebaseUpdate) {
+        // Condición mejorada: Si cambia la hora O si cambia el valor de CO
+        if(serverTime !== lastFirebaseUpdate || Math.abs(rawCO - lastCO) > 0.001) {
             lastFirebaseUpdate = serverTime;
+            lastCO = rawCO;
             lastLocalReceipt = Date.now(); 
             
             // Aquí confirmamos la conexión porque acaba de llegar un dato nuevo
@@ -227,14 +230,10 @@ function actualizarEstadoVisual(conectado) {
 // ---------------- WATCHDOG DE CONEXIÓN ----------------
 function checkConnectionWatchdog() {
     const now = Date.now();
-    // Umbral de 10 segundos sin datos nuevos
-    // Si han pasado más de 10 segundos desde 'lastLocalReceipt', marcamos Desconectado.
-    if (now - lastLocalReceipt > 10000) {
+    // Umbral aumentado a 15 segundos para evitar parpadeos si la red es lenta
+    if (now - lastLocalReceipt > 15000) {
         actualizarEstadoVisual(false);
     }
-    // NOTA: Eliminamos el 'else { actualizarEstadoVisual(true) }' para que el watchdog
-    // no fuerce el estado a conectado repetidamente. El estado 'Conectado' solo debe
-    // activarse en el evento de recepción de datos (arriba en actualizarDatos).
 }
 
 // Intervalos
