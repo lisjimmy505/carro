@@ -92,11 +92,26 @@ canvas {
 <script>
 // ---------------- CONFIGURACIÓN ----------------
 const dbUrl = "https://carro-f8554-default-rtdb.firebaseio.com/";
+const MAX_DATA_POINTS = 10; // Muestra solo los últimos 10 datos
 
 // Variables de control de conexión (Watchdog)
-let lastFirebaseUpdate = 0; // Timestamp que viene de Firebase
-let lastCO = -999;          // Último valor de CO recibido para verificar cambios
-let lastLocalReceipt = Date.now(); // Hora local de la última recepción válida
+let lastFirebaseUpdate = 0; 
+let lastLocalReceipt = Date.now(); 
+
+// Configuración común para animaciones suaves
+const commonOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: {
+        duration: 800, // Duración de la animación en ms
+        easing: 'easeOutQuart' // Efecto suave al moverse
+    },
+    plugins: { legend: { display: false } },
+    scales: { 
+        x: { grid: { color: '#3d3f53' }, ticks: { color: '#9a9a9a' } },
+        y: { beginAtZero: true, grid: { color: '#3d3f53' }, ticks: { color: '#9a9a9a' } } 
+    }
+};
 
 // ---------------- CONFIGURACIÓN GRÁFICAS ----------------
 // Gráfica CO2 (Verde)
@@ -109,23 +124,15 @@ const chartCO2 = new Chart(ctxCO2, {
             label: 'CO₂ (ppm)',
             borderColor: '#00d25b',
             backgroundColor: 'rgba(0, 210, 91, 0.1)',
-            borderWidth: 2,
-            pointRadius: 3,
+            borderWidth: 3,
+            pointRadius: 4,
             pointHoverRadius: 6,
             fill: true,
             data: [],
-            tension: 0.3
+            tension: 0.4 // Curvas más suaves
         }]
     },
-    options: { 
-        responsive: true, 
-        maintainAspectRatio: false, 
-        plugins: { legend: { display: false } }, // Ocultamos leyenda pequeña
-        scales: { 
-            x: { grid: { color: '#3d3f53' }, ticks: { color: '#9a9a9a' } },
-            y: { beginAtZero: true, grid: { color: '#3d3f53' }, ticks: { color: '#9a9a9a' } } 
-        } 
-    }
+    options: commonOptions
 });
 
 // Gráfica CO (Naranja)
@@ -138,89 +145,77 @@ const chartCO = new Chart(ctxCO, {
             label: 'CO (ppm)',
             borderColor: '#ff8d72',
             backgroundColor: 'rgba(255, 141, 114, 0.1)',
-            borderWidth: 2,
-            pointRadius: 3,
+            borderWidth: 3,
+            pointRadius: 4,
             pointHoverRadius: 6,
             fill: true,
             data: [],
-            tension: 0.3
+            tension: 0.4
         }]
     },
-    options: { 
-        responsive: true, 
-        maintainAspectRatio: false, 
-        plugins: { legend: { display: false } },
-        scales: { 
-            x: { grid: { color: '#3d3f53' }, ticks: { color: '#9a9a9a' } },
-            y: { beginAtZero: true, grid: { color: '#3d3f53' }, ticks: { color: '#9a9a9a' } } 
-        } 
-    }
+    options: commonOptions
 });
 
 // ---------------- LÓGICA DE ACTUALIZACIÓN ----------------
 function actualizarDatos() {
-    // Consulta a la base de datos de Firebase
-    // MODIFICADO: Agregamos ?nocache=timestamp para evitar que el navegador guarde la respuesta
-    // y siempre obtenga el dato más reciente.
     fetch(dbUrl + "sensores.json?nocache=" + new Date().getTime())
     .then(res => res.json())
     .then(data => {
         if(!data) return;
 
         const serverTime = Number(data.last_update);
-        const co2 = 0; // FORZADO A 0: Ignoramos lo que venga de Firebase para MQ135
+        
+        // Debug para ver qué llega en la consola del navegador
+        console.log(`Recibido: ${serverTime} | Último guardado: ${lastFirebaseUpdate}`);
+
+        const co2 = 0; // FORZADO A 0
         let rawCO = parseFloat(data.co); 
 
-        // --- TRUCO MATEMÁTICO PARA DEMOSTRACIÓN MQ9 ---
+        // Truco visual MQ9
         let visualCO = rawCO * 0.75; 
-
         if (rawCO > 1.9) {
             let diferencia = rawCO - 1.9;
             visualCO = visualCO + (diferencia * 5.0); 
         }
-        // -------------------------------------------
 
-        // Actualizamos los números grandes
         document.getElementById("co2_val").innerText = co2.toFixed(1) + " ppm";
         document.getElementById("co_val").innerText = visualCO.toFixed(1) + " ppm"; 
 
-        // VERIFICAR SI ES UN DATO NUEVO
-        // Si la hora del servidor es diferente a la última guardada, 
-        // significa que el ESP32 envió un nuevo paquete.
+        // DETECCIÓN DE CAMBIO
         if(serverTime !== lastFirebaseUpdate) {
             lastFirebaseUpdate = serverTime;
-            lastCO = rawCO;
             lastLocalReceipt = Date.now(); 
             
-            // Dato nuevo confirmado -> Estado OK
             actualizarEstadoVisual(true);
 
-            const timeStr = new Date(serverTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-            addData(chartCO2, timeStr, co2); // Se grafica 0
+            // Hora actual para la etiqueta X
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+            addData(chartCO2, timeStr, co2); 
             addData(chartCO, timeStr, visualCO); 
+        } else {
+            // Opcional: Si el dato es idéntico, logueamos advertencia
+            console.warn("El timestamp no ha cambiado. ESP32 enviando mismo dato o no actualizando 'last_update'.");
         }
     })
-    .catch(err => {
-        console.error("Error fetching:", err);
-        // Opcional: Si hay error de red real, podríamos marcar desconectado aquí también
-        // pero dejaremos que el watchdog lo maneje por tiempo.
-    });
+    .catch(err => console.error("Error fetching:", err));
 }
 
-// Función para añadir datos y limitar a 50 puntos
 function addData(chart, label, data) {
     chart.data.labels.push(label);
     chart.data.datasets.forEach((dataset) => {
         dataset.data.push(data);
     });
-    // Límite de 50 puntos para historial más largo
-    if (chart.data.labels.length > 50) {
-        chart.data.labels.shift();
+
+    // Límite a 10 puntos para efecto de movimiento rápido
+    if (chart.data.labels.length > MAX_DATA_POINTS) {
+        chart.data.labels.shift(); // Elimina el primero (izquierda)
         chart.data.datasets.forEach((dataset) => {
-            dataset.data.shift();
+            dataset.data.shift(); // Elimina el dato correspondiente
         });
     }
-    chart.update();
+    chart.update(); // Dispara la animación
 }
 
 function actualizarEstadoVisual(conectado) {
@@ -234,19 +229,17 @@ function actualizarEstadoVisual(conectado) {
     }
 }
 
-// ---------------- WATCHDOG DE CONEXIÓN ----------------
+// ---------------- WATCHDOG ----------------
 function checkConnectionWatchdog() {
     const now = Date.now();
-    // Si han pasado más de 15 segundos sin recibir un dato NUEVO (timestamp distinto),
-    // marcamos como desconectado.
-    if (now - lastLocalReceipt > 15000) {
+    // Aumentamos tolerancia a 16 segundos por si hay lag en la red
+    if (now - lastLocalReceipt > 16000) {
         actualizarEstadoVisual(false);
     }
 }
 
-// Intervalos
-setInterval(actualizarDatos, 2000);       // Consultar Firebase cada 2s
-setInterval(checkConnectionWatchdog, 1000); // Revisar watchdog cada 1s
+setInterval(actualizarDatos, 2000); 
+setInterval(checkConnectionWatchdog, 1000); 
 </script>
 
 </body>
