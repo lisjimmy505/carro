@@ -15,6 +15,7 @@ body {
 }
 
 h1 { margin-bottom: 10px; font-weight: 300; letter-spacing: 1px; }
+h2 { margin-top: 40px; border-top: 1px solid #3d3f53; padding-top: 20px; color: #ffffff; }
 
 /* --- ESTADO CONEXIÓN --- */
 .status-box { 
@@ -43,8 +44,8 @@ h1 { margin-bottom: 10px; font-weight: 300; letter-spacing: 1px; }
     background: #27293d;
     padding: 25px;
     border-radius: 15px;
-    width: 45%;
-    min-width: 350px;
+    width: 30%; /* Ajustado para caber 3 en fila */
+    min-width: 300px;
     box-shadow: 0 4px 15px rgba(0,0,0,0.3);
     border: 1px solid #3d3f53;
 }
@@ -52,7 +53,7 @@ h1 { margin-bottom: 10px; font-weight: 300; letter-spacing: 1px; }
 h3 { margin-top: 0; color: #9a9a9a; font-size: 1.2rem; }
 
 .value-display {
-    font-size: 42px;
+    font-size: 36px; /* Un poco mas pequeño para caber 3 */
     font-weight: bold;
     margin: 15px 0;
     text-shadow: 0 2px 4px rgba(0,0,0,0.5);
@@ -60,13 +61,43 @@ h3 { margin-top: 0; color: #9a9a9a; font-size: 1.2rem; }
 
 /* Colores de texto para valores */
 .text-co2 { color: #00d25b; } /* Verde Neon */
-.text-co { color: #ff8d72; }  /* Naranja/Coral */
+.text-co { color: #ff8d72; }  /* Naranja */
+.text-mq2 { color: #e14eca; } /* Rosa/Púrpura */
 
 canvas {
     width: 100% !important;
-    height: 300px !important;
+    height: 250px !important;
     margin-top: 10px;
 }
+
+/* --- CONTROLES HISTORIAL --- */
+.history-controls {
+    background: #27293d;
+    padding: 20px;
+    margin: 20px auto;
+    width: fit-content;
+    border-radius: 10px;
+    border: 1px solid #3d3f53;
+}
+
+input[type=range] {
+    accent-color: #e14eca;
+    vertical-align: middle;
+}
+
+button {
+    background: #1d8cf8;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 16px;
+    margin-left: 15px;
+    transition: 0.2s;
+}
+button:hover { background: #0b6ecc; }
+
 </style>
 </head>
 
@@ -87,25 +118,55 @@ canvas {
         <div id="co_val" class="value-display text-co">--- ppm</div>
         <canvas id="chartCO"></canvas>
     </div>
+
+    <div class="chart-card">
+        <h3>MQ2 (Gas/Humo)</h3>
+        <div id="mq2_val" class="value-display text-mq2">--- ppm</div>
+        <canvas id="chartMQ2"></canvas>
+    </div>
+</div>
+
+<h2>Historial de Sesión</h2>
+<div class="history-controls">
+    <label for="timeSlider">Tiempo a visualizar: <span id="timeVal" style="color:#1d8cf8; font-weight:bold;">10</span> min</label>
+    <br><br>
+    <input type="range" id="timeSlider" min="1" max="60" value="10" oninput="document.getElementById('timeVal').innerText = this.value">
+    <button onclick="mostrarHistorial()">Mostrar Datos</button>
+</div>
+
+<div class="charts-row">
+    <div class="chart-card">
+        <h3>Historial CO₂</h3>
+        <canvas id="histChartCO2"></canvas>
+    </div>
+    <div class="chart-card">
+        <h3>Historial CO</h3>
+        <canvas id="histChartCO"></canvas>
+    </div>
+    <div class="chart-card">
+        <h3>Historial MQ2</h3>
+        <canvas id="histChartMQ2"></canvas>
+    </div>
 </div>
 
 <script>
 // ---------------- CONFIGURACIÓN ----------------
 const dbUrl = "https://carro-f8554-default-rtdb.firebaseio.com/";
-const MAX_DATA_POINTS = 10; // Muestra solo los últimos 10 datos
+const MAX_DATA_POINTS = 10; // Para gráficas en vivo
 
-// Variables de control de conexión (Watchdog)
+// Variables de control
 let lastFirebaseUpdate = 0; 
 let lastLocalReceipt = Date.now(); 
 
-// Configuración común para animaciones suaves
-const commonOptions = {
+// ALMACÉN DE DATOS LOCAL (Para el historial)
+// Guardaremos objetos: { time: timestamp, label: "HH:MM:SS", co2: val, co: val, mq2: val }
+let sessionHistory = []; 
+
+// Opciones Gráficas En Vivo (Animación sliding)
+const liveOptions = {
     responsive: true,
     maintainAspectRatio: false,
-    animation: {
-        duration: 800, // Duración de la animación en ms
-        easing: 'easeOutQuart' // Efecto suave al moverse
-    },
+    animation: { duration: 800, easing: 'easeOutQuart' },
     plugins: { legend: { display: false } },
     scales: { 
         x: { grid: { color: '#3d3f53' }, ticks: { color: '#9a9a9a' } },
@@ -113,48 +174,60 @@ const commonOptions = {
     }
 };
 
-// ---------------- CONFIGURACIÓN GRÁFICAS ----------------
-// Gráfica CO2 (Verde)
-const ctxCO2 = document.getElementById('chartCO2').getContext('2d');
-const chartCO2 = new Chart(ctxCO2, {
+// Opciones Gráficas Historial (Estáticas, sin animación de entrada)
+const historyOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    animation: false, // Sin animación para carga rápida
+    plugins: { legend: { display: false } },
+    scales: { 
+        x: { grid: { color: '#3d3f53' }, ticks: { color: '#9a9a9a' } },
+        y: { beginAtZero: true, grid: { color: '#3d3f53' }, ticks: { color: '#9a9a9a' } } 
+    }
+};
+
+// ---------------- INICIALIZAR GRÁFICAS EN VIVO ----------------
+
+// 1. CO2 (Verde)
+const chartCO2 = new Chart(document.getElementById('chartCO2').getContext('2d'), {
     type: 'line',
-    data: {
-        labels: [],
-        datasets: [{
-            label: 'CO₂ (ppm)',
-            borderColor: '#00d25b',
-            backgroundColor: 'rgba(0, 210, 91, 0.1)',
-            borderWidth: 3,
-            pointRadius: 4,
-            pointHoverRadius: 6,
-            fill: true,
-            data: [],
-            tension: 0.4 // Curvas más suaves
-        }]
-    },
-    options: commonOptions
+    data: { labels: [], datasets: [{ borderColor: '#00d25b', backgroundColor: 'rgba(0, 210, 91, 0.1)', borderWidth: 3, fill: true, tension: 0.4, data: [] }] },
+    options: liveOptions
 });
 
-// Gráfica CO (Naranja)
-const ctxCO = document.getElementById('chartCO').getContext('2d');
-const chartCO = new Chart(ctxCO, {
+// 2. CO (Naranja)
+const chartCO = new Chart(document.getElementById('chartCO').getContext('2d'), {
     type: 'line',
-    data: {
-        labels: [],
-        datasets: [{
-            label: 'CO (ppm)',
-            borderColor: '#ff8d72',
-            backgroundColor: 'rgba(255, 141, 114, 0.1)',
-            borderWidth: 3,
-            pointRadius: 4,
-            pointHoverRadius: 6,
-            fill: true,
-            data: [],
-            tension: 0.4
-        }]
-    },
-    options: commonOptions
+    data: { labels: [], datasets: [{ borderColor: '#ff8d72', backgroundColor: 'rgba(255, 141, 114, 0.1)', borderWidth: 3, fill: true, tension: 0.4, data: [] }] },
+    options: liveOptions
 });
+
+// 3. MQ2 (Rosa/Púrpura) - NUEVA
+const chartMQ2 = new Chart(document.getElementById('chartMQ2').getContext('2d'), {
+    type: 'line',
+    data: { labels: [], datasets: [{ borderColor: '#e14eca', backgroundColor: 'rgba(225, 78, 202, 0.1)', borderWidth: 3, fill: true, tension: 0.4, data: [] }] },
+    options: liveOptions
+});
+
+// ---------------- INICIALIZAR GRÁFICAS HISTORIAL ----------------
+const histChartCO2 = new Chart(document.getElementById('histChartCO2').getContext('2d'), {
+    type: 'bar', // Tipo barra para diferenciar o line si prefieres
+    data: { labels: [], datasets: [{ backgroundColor: '#00d25b', data: [] }] },
+    options: historyOptions
+});
+
+const histChartCO = new Chart(document.getElementById('histChartCO').getContext('2d'), {
+    type: 'bar',
+    data: { labels: [], datasets: [{ backgroundColor: '#ff8d72', data: [] }] },
+    options: historyOptions
+});
+
+const histChartMQ2 = new Chart(document.getElementById('histChartMQ2').getContext('2d'), {
+    type: 'bar',
+    data: { labels: [], datasets: [{ backgroundColor: '#e14eca', data: [] }] },
+    options: historyOptions
+});
+
 
 // ---------------- LÓGICA DE ACTUALIZACIÓN ----------------
 function actualizarDatos() {
@@ -164,58 +237,93 @@ function actualizarDatos() {
         if(!data) return;
 
         const serverTime = Number(data.last_update);
+        const co2 = 0; // Forzado a 0 según tu código anterior
         
-        // Debug para ver qué llega en la consola del navegador
-        console.log(`Recibido: ${serverTime} | Último guardado: ${lastFirebaseUpdate}`);
-
-        const co2 = 0; // FORZADO A 0
+        // Procesar CO
         let rawCO = parseFloat(data.co); 
-
-        // Truco visual MQ9
         let visualCO = rawCO * 0.75; 
-        if (rawCO > 1.9) {
-            let diferencia = rawCO - 1.9;
-            visualCO = visualCO + (diferencia * 5.0); 
-        }
+        if (rawCO > 1.9) { visualCO += (rawCO - 1.9) * 5.0; }
 
+        // Procesar MQ2 (Asumiendo que viene como data.mq2, si no, usamos 0 o simulamos)
+        // Si tu ESP32 no envía "mq2", esto será NaN, así que ponemos un fallback:
+        let valMQ2 = data.mq2 ? parseFloat(data.mq2) : 0; 
+        
+        // Actualizar Textos
         document.getElementById("co2_val").innerText = co2.toFixed(1) + " ppm";
         document.getElementById("co_val").innerText = visualCO.toFixed(1) + " ppm"; 
+        document.getElementById("mq2_val").innerText = valMQ2.toFixed(1) + " ppm";
 
         // DETECCIÓN DE CAMBIO
         if(serverTime !== lastFirebaseUpdate) {
             lastFirebaseUpdate = serverTime;
             lastLocalReceipt = Date.now(); 
-            
             actualizarEstadoVisual(true);
 
-            // Hora actual para la etiqueta X
             const now = new Date();
             const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-            addData(chartCO2, timeStr, co2); 
-            addData(chartCO, timeStr, visualCO); 
+            // 1. Agregar a gráficas EN VIVO (Desplazamiento)
+            addLiveData(chartCO2, timeStr, co2); 
+            addLiveData(chartCO, timeStr, visualCO);
+            addLiveData(chartMQ2, timeStr, valMQ2);
+
+            // 2. Guardar en HISTORIAL LOCAL (Array en memoria)
+            sessionHistory.push({
+                timestamp: Date.now(),
+                label: timeStr,
+                co2: co2,
+                co: visualCO,
+                mq2: valMQ2
+            });
+
         } else {
-            // Opcional: Si el dato es idéntico, logueamos advertencia
-            console.warn("El timestamp no ha cambiado. ESP32 enviando mismo dato o no actualizando 'last_update'.");
+            // Watchdog logic warning (opcional)
         }
     })
-    .catch(err => console.error("Error fetching:", err));
+    .catch(err => console.error("Error:", err));
 }
 
-function addData(chart, label, data) {
+// Función para gráficas en vivo (limita a 10 puntos)
+function addLiveData(chart, label, data) {
     chart.data.labels.push(label);
-    chart.data.datasets.forEach((dataset) => {
-        dataset.data.push(data);
-    });
+    chart.data.datasets.forEach((dataset) => dataset.data.push(data));
 
-    // Límite a 10 puntos para efecto de movimiento rápido
     if (chart.data.labels.length > MAX_DATA_POINTS) {
-        chart.data.labels.shift(); // Elimina el primero (izquierda)
-        chart.data.datasets.forEach((dataset) => {
-            dataset.data.shift(); // Elimina el dato correspondiente
-        });
+        chart.data.labels.shift(); 
+        chart.data.datasets.forEach((dataset) => dataset.data.shift());
     }
-    chart.update(); // Dispara la animación
+    chart.update();
+}
+
+// ---------------- LÓGICA HISTORIAL (SLIDER + BOTÓN) ----------------
+function mostrarHistorial() {
+    const minutes = parseInt(document.getElementById('timeSlider').value);
+    const cutoffTime = Date.now() - (minutes * 60 * 1000); // Tiempo actual menos X minutos
+
+    // Filtrar datos del array en memoria
+    const filteredData = sessionHistory.filter(item => item.timestamp >= cutoffTime);
+
+    if(filteredData.length === 0) {
+        alert("No hay datos suficientes acumulados en esta sesión para el tiempo seleccionado.");
+        return;
+    }
+
+    // Preparar arrays para Chart.js
+    const labels = filteredData.map(d => d.label);
+    const dataCO2 = filteredData.map(d => d.co2);
+    const dataCO = filteredData.map(d => d.co);
+    const dataMQ2 = filteredData.map(d => d.mq2);
+
+    // Actualizar gráficas de historial
+    updateHistoryChart(histChartCO2, labels, dataCO2);
+    updateHistoryChart(histChartCO, labels, dataCO);
+    updateHistoryChart(histChartMQ2, labels, dataMQ2);
+}
+
+function updateHistoryChart(chart, labels, data) {
+    chart.data.labels = labels;
+    chart.data.datasets[0].data = data;
+    chart.update();
 }
 
 function actualizarEstadoVisual(conectado) {
@@ -229,11 +337,9 @@ function actualizarEstadoVisual(conectado) {
     }
 }
 
-// ---------------- WATCHDOG ----------------
+// Watchdog
 function checkConnectionWatchdog() {
-    const now = Date.now();
-    // Aumentamos tolerancia a 16 segundos por si hay lag en la red
-    if (now - lastLocalReceipt > 16000) {
+    if (Date.now() - lastLocalReceipt > 16000) {
         actualizarEstadoVisual(false);
     }
 }
