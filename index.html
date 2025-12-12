@@ -250,19 +250,13 @@ function mostrarHistorial() {
     btn.disabled = true; 
     btn.innerText = "Cargando...";
 
-    // --- CORRECCIÓN DE ZONA HORARIA ---
-    // Tu ESP32 está enviando hora UTC-6 (21600 segundos menos).
-    // El navegador usa UTC. Debemos restar 6 horas al tiempo actual del navegador
-    // para que coincida con el tiempo que envía el ESP32.
-    const horasDiferencia = 6; 
-    const ajusteMs = horasDiferencia * 60 * 60 * 1000; 
-
+    // 1. Calcular tiempo de corte (hace X minutos)
     const minutes = parseInt(document.getElementById('timeSlider').value);
-    
-    // Calculamos el tiempo de corte ajustado a la zona horaria del ESP32
-    // (Ahora - 6 horas - Tiempo seleccionado)
-    const cutoffTime = (Date.now() - ajusteMs) - (minutes * 60 * 1000);
+    // Nota: Como vamos a filtrar en JS, pedimos un exceso de datos para asegurar
+    const cutoffTime = Date.now() - (minutes * 60 * 1000);
 
+    // 2. Petición REST a Firebase
+    // Importante: orderBy="timestamp" requiere indexación en reglas de Firebase
     const url = `${dbUrl}historial.json?auth=${apiKey}&orderBy="timestamp"&limitToLast=500`;
 
     fetch(url)
@@ -273,50 +267,38 @@ function mostrarHistorial() {
             return;
         }
 
+        // Convertir objeto {id:{...}, id:{...}} a Array [{...}, {...}]
         let arr = Object.values(data);
 
-        // Debug: Ver en consola qué fechas estamos recibiendo
-        if(arr.length > 0) {
-            const ultimaFecha = new Date(arr[arr.length-1].timestamp);
-            console.log("Último dato recibido del ESP32 (Fecha):", ultimaFecha.toString());
-            console.log("Timestamp crudo ESP32:", arr[arr.length-1].timestamp);
-            console.log("Cutoff calculado (Filtro):", cutoffTime);
-        }
-
-        // Filtramos usando el tiempo ajustado
+        // 3. FILTRADO REAL (Usando el timestamp del ESP32)
         arr = arr.filter(item => item.timestamp >= cutoffTime);
 
-        // Ordenar
+        // Ordenar por tiempo (del más viejo al más nuevo)
         arr.sort((a, b) => a.timestamp - b.timestamp);
 
         if(arr.length === 0) {
-            alert(`Datos encontrados en Firebase, pero ninguno en los últimos ${minutes} minutos. Revisa la consola (F12) para ver las fechas.`);
+            alert("No hay datos en el rango de tiempo seleccionado.");
             return;
         }
 
-        // Mapear datos
+        // 4. Mapear datos para Chart.js
         const labels = arr.map(item => {
-            // Como el timestamp ya viene restado (hora local), al crear el Date
-            // el navegador podría intentar ajustarlo de nuevo. 
-            // Para mostrarlo tal cual lo envió el ESP32, usamos UTC methods o simplemente:
             const d = new Date(item.timestamp);
-            // Formato simple para evitar doble conversión
-            return d.getUTCHours() + ':' + 
-                   (d.getUTCMinutes()<10?'0':'') + d.getUTCMinutes() + ':' + 
-                   (d.getUTCSeconds()<10?'0':'') + d.getUTCSeconds();
+            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second:'2-digit' });
         });
 
         const dCO2 = arr.map(item => item.co2);
         const dCO = arr.map(item => item.co);
         const dMQ2 = arr.map(item => item.mq2 || 0);
 
+        // 5. Renderizar
         updateChart(histChartCO2, labels, dCO2);
         updateChart(histChartCO, labels, dCO);
         updateChart(histChartMQ2, labels, dMQ2);
     })
     .catch(error => {
         console.error("Error historial:", error);
-        alert("Error cargando historial.");
+        alert("Error cargando historial. Revisa la consola.");
     })
     .finally(() => {
         btn.disabled = false;
@@ -353,4 +335,3 @@ setInterval(actualizarDatosEnVivo, 2000);
 </script>
 </body>
 </html>
-
