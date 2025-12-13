@@ -250,55 +250,76 @@ function mostrarHistorial() {
     btn.disabled = true; 
     btn.innerText = "Cargando...";
 
-    // 1. Calcular tiempo de corte (hace X minutos)
-    const minutes = parseInt(document.getElementById('timeSlider').value);
-    // Nota: Como vamos a filtrar en JS, pedimos un exceso de datos para asegurar
-    const cutoffTime = Date.now() - (minutes * 60 * 1000);
+    // -------------------------------------------------------------
+    // AJUSTE CRÍTICO DE ZONA HORARIA (CDMX)
+    // -------------------------------------------------------------
+    // El ESP32 envía datos con hora CDMX (UTC-6).
+    // Javascript (Date.now) trabaja en UTC. Hay una diferencia de 6 horas.
+    // 6 horas = 21600000 milisegundos.
+    const OFFSET_CDMX = 6 * 60 * 60 * 1000; 
 
-    // 2. Petición REST a Firebase
-    // Importante: orderBy="timestamp" requiere indexación en reglas de Firebase
-    const url = `${dbUrl}historial.json?auth=${apiKey}&orderBy="timestamp"&limitToLast=500`;
+    const minutes = parseInt(document.getElementById('timeSlider').value);
+    
+    // Calculamos el "Ahora" ajustado a como lo ve el ESP32
+    const nowAdjusted = Date.now() - OFFSET_CDMX;
+    
+    // El punto de corte es: (Ahora - 6 horas) - (Minutos del slider)
+    const cutoffTime = nowAdjusted - (minutes * 60 * 1000);
+
+    // Debug en consola para verificar
+    console.log("Browser Time (UTC):", Date.now());
+    console.log("ESP32 Time Target (CDMX):", nowAdjusted);
+    console.log("Cutoff Filter:", cutoffTime);
+
+    const url = `${dbUrl}historial.json?auth=${apiKey}&orderBy="timestamp"&limitToLast=300`;
 
     fetch(url)
     .then(res => res.json())
     .then(data => {
         if (!data) {
-            alert("No hay datos en el historial.");
+            alert("Base de datos vacía.");
             return;
         }
 
-        // Convertir objeto {id:{...}, id:{...}} a Array [{...}, {...}]
         let arr = Object.values(data);
 
-        // 3. FILTRADO REAL (Usando el timestamp del ESP32)
+        // FILTRADO CON EL TIEMPO AJUSTADO
         arr = arr.filter(item => item.timestamp >= cutoffTime);
 
-        // Ordenar por tiempo (del más viejo al más nuevo)
+        // Ordenar
         arr.sort((a, b) => a.timestamp - b.timestamp);
 
         if(arr.length === 0) {
-            alert("No hay datos en el rango de tiempo seleccionado.");
+            // Si sigue saliendo esto, mostramos en alerta qué tiene la DB
+            const ultimoDato = Object.values(data).pop();
+            const fechaUltimo = new Date(ultimoDato.timestamp);
+            alert(`No hay datos en los últimos ${minutes} min.\n\nDiagnóstico:\nÚltimo dato en DB: ${fechaUltimo.toLocaleTimeString()}\nTu hora ajustada: ${new Date(nowAdjusted).toLocaleTimeString()}`);
             return;
         }
 
-        // 4. Mapear datos para Chart.js
+        // Mapear datos
         const labels = arr.map(item => {
+            // Como el dato ya viene en hora CDMX local, no queremos que el navegador
+            // le aplique OTRA conversión de zona horaria.
+            // Usamos getUTC... para leer el dato "tal cual" llegó.
             const d = new Date(item.timestamp);
-            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second:'2-digit' });
+            const hh = d.getUTCHours().toString().padStart(2, '0');
+            const mm = d.getUTCMinutes().toString().padStart(2, '0');
+            const ss = d.getUTCSeconds().toString().padStart(2, '0');
+            return `${hh}:${mm}:${ss}`;
         });
 
         const dCO2 = arr.map(item => item.co2);
         const dCO = arr.map(item => item.co);
         const dMQ2 = arr.map(item => item.mq2 || 0);
 
-        // 5. Renderizar
         updateChart(histChartCO2, labels, dCO2);
         updateChart(histChartCO, labels, dCO);
         updateChart(histChartMQ2, labels, dMQ2);
     })
     .catch(error => {
-        console.error("Error historial:", error);
-        alert("Error cargando historial. Revisa la consola.");
+        console.error(error);
+        alert("Error al cargar datos.");
     })
     .finally(() => {
         btn.disabled = false;
@@ -335,3 +356,4 @@ setInterval(actualizarDatosEnVivo, 2000);
 </script>
 </body>
 </html>
+
