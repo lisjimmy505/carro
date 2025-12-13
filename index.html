@@ -6,7 +6,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
-/* --- ESTILOS VISUALES (Igual que antes) --- */
+/* --- ESTILOS VISUALES --- */
 body {
     font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
     background: #1e1e2f;
@@ -139,21 +139,20 @@ button:hover:not(:disabled) { background: #0b6ecc; }
 
 <script>
 // ---------------- CONFIGURACIÓN FIREBASE ----------------
-// REEMPLAZA CON TUS DATOS EXACTOS
 const dbUrl = "https://carro-f8554-default-rtdb.firebaseio.com/";
-// La API Key la tienes en tu código ESP32, pégala aquí
 const apiKey = "AIzaSyDPf9ZKkIa66_Uw4hxE0KnZ9vWcxVlocvCo"; 
 
 // ---------------- VARIABLES GLOBALES ----------------
 let lastFirebaseUpdate = 0; 
 let lastLocalReceipt = Date.now(); 
-const MAX_LIVE_POINTS = 15; // Puntos máximos en gráfica viva
+const MAX_LIVE_POINTS = 20; // Aumentado ligeramente para ver más historial inmediato
 
-// Configuración visual de gráficas
+// CAMBIO: Desactivar animación para respuesta instantánea
 const commonOptions = {
     responsive: true,
     maintainAspectRatio: false,
     plugins: { legend: { display: false } },
+    animation: false, // ¡CLAVE PARA LA VELOCIDAD!
     scales: { 
         x: { grid: { color: '#3d3f53' }, ticks: { color: '#9a9a9a', maxTicksLimit: 6 } },
         y: { beginAtZero: true, grid: { color: '#3d3f53' }, ticks: { color: '#9a9a9a' } } 
@@ -163,20 +162,21 @@ const commonOptions = {
 // ---------------- INICIALIZAR GRÁFICAS (Chart.js) ----------------
 
 // 1. Gráficas EN VIVO (Line)
+// tension: 0.1 hace la linea más directa, reduciendo la curva visual
 const chartCO2 = new Chart(document.getElementById('chartCO2'), {
     type: 'line',
-    data: { labels: [], datasets: [{ borderColor: '#00d25b', backgroundColor: 'rgba(0, 210, 91, 0.1)', borderWidth: 3, fill: true, tension: 0.4, data: [] }] },
-    options: { ...commonOptions, animation: { duration: 800 } }
+    data: { labels: [], datasets: [{ borderColor: '#00d25b', backgroundColor: 'rgba(0, 210, 91, 0.1)', borderWidth: 3, fill: true, tension: 0.1, data: [] }] },
+    options: commonOptions
 });
 const chartCO = new Chart(document.getElementById('chartCO'), {
     type: 'line',
-    data: { labels: [], datasets: [{ borderColor: '#ff8d72', backgroundColor: 'rgba(255, 141, 114, 0.1)', borderWidth: 3, fill: true, tension: 0.4, data: [] }] },
-    options: { ...commonOptions, animation: { duration: 800 } }
+    data: { labels: [], datasets: [{ borderColor: '#ff8d72', backgroundColor: 'rgba(255, 141, 114, 0.1)', borderWidth: 3, fill: true, tension: 0.1, data: [] }] },
+    options: commonOptions
 });
 const chartMQ2 = new Chart(document.getElementById('chartMQ2'), {
     type: 'line',
-    data: { labels: [], datasets: [{ borderColor: '#e14eca', backgroundColor: 'rgba(225, 78, 202, 0.1)', borderWidth: 3, fill: true, tension: 0.4, data: [] }] },
-    options: { ...commonOptions, animation: { duration: 800 } }
+    data: { labels: [], datasets: [{ borderColor: '#e14eca', backgroundColor: 'rgba(225, 78, 202, 0.1)', borderWidth: 3, fill: true, tension: 0.1, data: [] }] },
+    options: commonOptions
 });
 
 // 2. Gráficas HISTORIAL (Bar)
@@ -197,32 +197,28 @@ const histChartMQ2 = new Chart(document.getElementById('histChartMQ2'), {
 });
 
 
-// ---------------- LÓGICA EN VIVO (LOOP) ----------------
+// ---------------- LÓGICA EN VIVO ----------------
 function actualizarDatosEnVivo() {
-    // Usamos nocache para evitar que el navegador guarde datos viejos
+    // Usamos nocache para evitar caché del navegador
     fetch(dbUrl + "sensores.json?auth=" + apiKey + "&nocache=" + Date.now())
     .then(res => res.json())
     .then(data => {
         if(!data) return;
 
-        // Recuperar timestamp enviado por el ESP
         const serverTimestamp = Number(data.last_update);
         const co2 = data.co2 ? parseFloat(data.co2) : 0;
         const co = data.co ? parseFloat(data.co) : 0;
-        const mq2 = data.mq2 ? parseFloat(data.mq2) : 0; // Opcional si agregas este sensor
+        const mq2 = data.mq2 ? parseFloat(data.mq2) : 0;
 
-        // Actualizar textos
         document.getElementById("co2_val").innerText = co2.toFixed(1) + " ppm";
         document.getElementById("co_val").innerText = co.toFixed(1) + " ppm";
         document.getElementById("mq2_val").innerText = mq2.toFixed(1) + " ppm";
 
-        // Si el timestamp cambió, es un dato nuevo
         if(serverTimestamp !== lastFirebaseUpdate) {
             lastFirebaseUpdate = serverTimestamp;
             lastLocalReceipt = Date.now();
             actualizarEstado(true);
 
-            // Hora para la gráfica en vivo
             const date = new Date(serverTimestamp);
             const timeStr = date.toLocaleTimeString();
 
@@ -231,7 +227,7 @@ function actualizarDatosEnVivo() {
             addPoint(chartMQ2, timeStr, mq2);
         }
     })
-    .catch(err => console.error("Error fetching live data:", err));
+    .catch(err => console.error("Error live:", err));
 }
 
 function addPoint(chart, label, data) {
@@ -241,22 +237,18 @@ function addPoint(chart, label, data) {
         chart.data.labels.shift();
         chart.data.datasets[0].data.shift();
     }
-    chart.update('none'); // Update sin animación pesada
+    chart.update('none'); // Update sin animación
 }
 
-// ---------------- LÓGICA DE HISTORIAL (LA CORRECCIÓN) ----------------
+// ---------------- LÓGICA DE HISTORIAL ----------------
 function mostrarHistorial() {
     const btn = document.getElementById("btnHistorial");
     btn.disabled = true; 
     btn.innerText = "Cargando...";
 
-    // 1. Calcular tiempo de corte (hace X minutos)
     const minutes = parseInt(document.getElementById('timeSlider').value);
-    // Nota: Como vamos a filtrar en JS, pedimos un exceso de datos para asegurar
     const cutoffTime = Date.now() - (minutes * 60 * 1000);
 
-    // 2. Petición REST a Firebase
-    // Importante: orderBy="timestamp" requiere indexación en reglas de Firebase
     const url = `${dbUrl}historial.json?auth=${apiKey}&orderBy="timestamp"&limitToLast=500`;
 
     fetch(url)
@@ -267,21 +259,15 @@ function mostrarHistorial() {
             return;
         }
 
-        // Convertir objeto {id:{...}, id:{...}} a Array [{...}, {...}]
         let arr = Object.values(data);
-
-        // 3. FILTRADO REAL (Usando el timestamp del ESP32)
         arr = arr.filter(item => item.timestamp >= cutoffTime);
-
-        // Ordenar por tiempo (del más viejo al más nuevo)
         arr.sort((a, b) => a.timestamp - b.timestamp);
 
         if(arr.length === 0) {
-            alert("No hay datos en el rango de tiempo seleccionado.");
+            alert("No hay datos recientes en el rango seleccionado.");
             return;
         }
 
-        // 4. Mapear datos para Chart.js
         const labels = arr.map(item => {
             const d = new Date(item.timestamp);
             return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second:'2-digit' });
@@ -291,14 +277,13 @@ function mostrarHistorial() {
         const dCO = arr.map(item => item.co);
         const dMQ2 = arr.map(item => item.mq2 || 0);
 
-        // 5. Renderizar
         updateChart(histChartCO2, labels, dCO2);
         updateChart(histChartCO, labels, dCO);
         updateChart(histChartMQ2, labels, dMQ2);
     })
     .catch(error => {
         console.error("Error historial:", error);
-        alert("Error cargando historial. Revisa la consola.");
+        alert("Error cargando historial.");
     })
     .finally(() => {
         btn.disabled = false;
@@ -312,7 +297,6 @@ function updateChart(chart, labels, data) {
     chart.update();
 }
 
-// ---------------- UTILIDADES ----------------
 function actualizarEstado(conectado) {
     const el = document.getElementById("status");
     if(conectado) {
@@ -324,9 +308,9 @@ function actualizarEstado(conectado) {
     }
 }
 
-// Watchdog: Si no recibimos datos nuevos en 15 seg, marcar desconectado
+// Watchdog: Si no hay datos en 6 seg, marcar desconectado
 setInterval(() => {
-    if(Date.now() - lastLocalReceipt > 15000) actualizarEstado(false);
+    if(Date.now() - lastLocalReceipt > 6000) actualizarEstado(false);
 }, 2000);
 
 // Loop principal (cada 2 segundos)
