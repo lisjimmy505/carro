@@ -2,165 +2,336 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>Monitor IoT</title>
+<title>Monitor Calidad del Aire IoT</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<style>
-    /* Estilos Simplificados y Elegantes */
-    body { font-family: sans-serif; background: #1e1e2f; color: #fff; text-align: center; padding: 20px; }
-    .status-box { padding: 8px 20px; border-radius: 20px; font-weight: bold; margin-bottom: 20px; display: inline-block; }
-    .ok { background: #00d25b20; color: #00d25b; border: 1px solid #00d25b; }
-    .fail { background: #fd5d9320; color: #fd5d93; border: 1px solid #fd5d93; }
-    
-    .charts-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; margin-top: 20px; }
-    .chart-card { background: #27293d; padding: 20px; border-radius: 10px; width: 30%; min-width: 300px; }
-    canvas { width: 100% !important; height: 200px !important; }
-    
-    .value-display { font-size: 2em; margin: 10px 0; font-weight: bold; }
-    .text-co2 { color: #00d25b; }
-    .text-co { color: #ff8d72; }
 
-    /* Controles */
-    .controls { background: #2b2d42; padding: 15px; border-radius: 10px; display: inline-block; margin-top: 30px; }
-    button { background: #1d8cf8; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; }
-    button:hover { background: #0b6ecc; }
-    button:disabled { background: #555; }
+<style>
+/* --- ESTILOS VISUALES (Igual que antes) --- */
+body {
+    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    background: #1e1e2f;
+    color: #e0e0e0;
+    text-align: center;
+    margin: 0; padding: 20px;
+}
+h1 { margin-bottom: 10px; font-weight: 300; letter-spacing: 1px; }
+h2 { margin-top: 40px; border-top: 1px solid #3d3f53; padding-top: 20px; color: #ffffff; }
+
+/* Indicador de Estado */
+.status-box { 
+    display: inline-block; 
+    padding: 8px 25px; 
+    border-radius: 20px; 
+    font-size: 16px; 
+    font-weight: bold;
+    margin-bottom: 30px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+}
+.ok { background: rgba(0, 210, 91, 0.2); color: #00d25b; border: 1px solid #00d25b; }
+.fail { background: rgba(253, 93, 147, 0.2); color: #fd5d93; border: 1px solid #fd5d93; }
+
+/* Contenedores de Gráficas */
+.charts-row {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 30px;
+    margin-top: 20px;
+}
+.chart-card {
+    background: #27293d;
+    padding: 25px;
+    border-radius: 15px;
+    width: 30%; 
+    min-width: 300px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+    border: 1px solid #3d3f53;
+}
+h3 { margin-top: 0; color: #9a9a9a; font-size: 1.2rem; }
+.value-display {
+    font-size: 36px; 
+    font-weight: bold;
+    margin: 15px 0;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+}
+
+/* Colores */
+.text-co2 { color: #00d25b; } /* Verde */
+.text-co { color: #ff8d72; }  /* Naranja */
+.text-mq2 { color: #e14eca; } /* Rosa */
+
+canvas {
+    width: 100% !important;
+    height: 250px !important;
+    margin-top: 10px;
+}
+
+/* Controles del Historial */
+.history-controls {
+    background: #27293d;
+    padding: 20px;
+    margin: 20px auto;
+    width: fit-content;
+    border-radius: 10px;
+    border: 1px solid #3d3f53;
+}
+button {
+    background: #1d8cf8;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 16px;
+    margin-left: 15px;
+    transition: 0.2s;
+}
+button:disabled { background: #555; cursor: not-allowed; }
+button:hover:not(:disabled) { background: #0b6ecc; }
 </style>
 </head>
+
 <body>
 
-<h1>Monitor de Gases</h1>
-<div id="status" class="status-box fail">Conectando...</div>
+<h1>Monitor de Gases en Tiempo Real</h1>
+<div id="status" class="status-box fail">Esperando conexión...</div>
 
 <div class="charts-row">
     <div class="chart-card">
-        <h3>CO₂ (En Vivo)</h3>
-        <div id="co2_val" class="value-display text-co2">---</div>
+        <h3>MQ135 (CO₂)</h3>
+        <div id="co2_val" class="value-display text-co2">--- ppm</div>
         <canvas id="chartCO2"></canvas>
     </div>
     <div class="chart-card">
-        <h3>CO (En Vivo)</h3>
-        <div id="co_val" class="value-display text-co">---</div>
+        <h3>MQ9 (CO)</h3>
+        <div id="co_val" class="value-display text-co">--- ppm</div>
         <canvas id="chartCO"></canvas>
+    </div>
+    <div class="chart-card">
+        <h3>MQ2 (Gas/Humo)</h3>
+        <div id="mq2_val" class="value-display text-mq2">--- ppm</div>
+        <canvas id="chartMQ2"></canvas>
     </div>
 </div>
 
-<div class="controls">
-    <h3>Descargar Historial Offline</h3>
-    <label>Últimos <span id="timeVal">10</span> minutos</label>
-    <input type="range" id="timeSlider" min="1" max="60" value="10" oninput="document.getElementById('timeVal').innerText=this.value">
-    <button id="btnHist" onclick="cargarHistorial()">Ver Historial</button>
+<h2>Historial (Datos Reales desde Firebase)</h2>
+<div class="history-controls">
+    <label for="timeSlider">Tiempo a visualizar: <span id="timeVal" style="color:#1d8cf8; font-weight:bold;">10</span> min</label>
+    <br><br>
+    <input type="range" id="timeSlider" min="1" max="60" value="10" oninput="document.getElementById('timeVal').innerText = this.value">
+    <button id="btnHistorial" onclick="mostrarHistorial()">Mostrar Datos</button>
 </div>
 
 <div class="charts-row">
-    <div class="chart-card" style="width: 45%;">
+    <div class="chart-card">
         <h3>Historial CO₂</h3>
         <canvas id="histChartCO2"></canvas>
     </div>
-    <div class="chart-card" style="width: 45%;">
+    <div class="chart-card">
         <h3>Historial CO</h3>
         <canvas id="histChartCO"></canvas>
+    </div>
+    <div class="chart-card">
+        <h3>Historial MQ2</h3>
+        <canvas id="histChartMQ2"></canvas>
     </div>
 </div>
 
 <script>
+// ---------------- CONFIGURACIÓN FIREBASE ----------------
+// REEMPLAZA CON TUS DATOS EXACTOS
 const dbUrl = "https://carro-f8554-default-rtdb.firebaseio.com/";
+// La API Key la tienes en tu código ESP32, pégala aquí
 const apiKey = "AIzaSyDPf9ZKkIa66_Uw4hxE0KnZ9vWcxVlocvCo"; 
 
-// --- GRÁFICAS CONFIG ---
-const commonOpts = { 
-    responsive: true, maintainAspectRatio: false, animation: false,
-    scales: { x: { ticks: { color: '#aaa', maxTicksLimit: 5 } }, y: { beginAtZero: true, ticks: { color: '#aaa' } } }
+// ---------------- VARIABLES GLOBALES ----------------
+let lastFirebaseUpdate = 0; 
+let lastLocalReceipt = Date.now(); 
+const MAX_LIVE_POINTS = 15; // Puntos máximos en gráfica viva
+
+// Configuración visual de gráficas
+const commonOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: { 
+        x: { grid: { color: '#3d3f53' }, ticks: { color: '#9a9a9a', maxTicksLimit: 6 } },
+        y: { beginAtZero: true, grid: { color: '#3d3f53' }, ticks: { color: '#9a9a9a' } } 
+    }
 };
 
-// VIVO
-const cCO2 = new Chart(document.getElementById('chartCO2'), { type: 'line', data: { labels: [], datasets: [{ data: [], borderColor: '#00d25b', tension: 0.4 }] }, options: commonOpts });
-const cCO = new Chart(document.getElementById('chartCO'), { type: 'line', data: { labels: [], datasets: [{ data: [], borderColor: '#ff8d72', tension: 0.4 }] }, options: commonOpts });
+// ---------------- INICIALIZAR GRÁFICAS (Chart.js) ----------------
 
-// HISTORIAL
-const hCO2 = new Chart(document.getElementById('histChartCO2'), { type: 'bar', data: { labels: [], datasets: [{ data: [], backgroundColor: '#00d25b' }] }, options: commonOpts });
-const hCO = new Chart(document.getElementById('histChartCO'), { type: 'bar', data: { labels: [], datasets: [{ data: [], backgroundColor: '#ff8d72' }] }, options: commonOpts });
+// 1. Gráficas EN VIVO (Line)
+const chartCO2 = new Chart(document.getElementById('chartCO2'), {
+    type: 'line',
+    data: { labels: [], datasets: [{ borderColor: '#00d25b', backgroundColor: 'rgba(0, 210, 91, 0.1)', borderWidth: 3, fill: true, tension: 0.4, data: [] }] },
+    options: { ...commonOptions, animation: { duration: 800 } }
+});
+const chartCO = new Chart(document.getElementById('chartCO'), {
+    type: 'line',
+    data: { labels: [], datasets: [{ borderColor: '#ff8d72', backgroundColor: 'rgba(255, 141, 114, 0.1)', borderWidth: 3, fill: true, tension: 0.4, data: [] }] },
+    options: { ...commonOptions, animation: { duration: 800 } }
+});
+const chartMQ2 = new Chart(document.getElementById('chartMQ2'), {
+    type: 'line',
+    data: { labels: [], datasets: [{ borderColor: '#e14eca', backgroundColor: 'rgba(225, 78, 202, 0.1)', borderWidth: 3, fill: true, tension: 0.4, data: [] }] },
+    options: { ...commonOptions, animation: { duration: 800 } }
+});
 
-let lastUpdate = 0;
+// 2. Gráficas HISTORIAL (Bar)
+const histChartCO2 = new Chart(document.getElementById('histChartCO2'), {
+    type: 'bar',
+    data: { labels: [], datasets: [{ backgroundColor: '#00d25b', data: [] }] },
+    options: commonOptions
+});
+const histChartCO = new Chart(document.getElementById('histChartCO'), {
+    type: 'bar',
+    data: { labels: [], datasets: [{ backgroundColor: '#ff8d72', data: [] }] },
+    options: commonOptions
+});
+const histChartMQ2 = new Chart(document.getElementById('histChartMQ2'), {
+    type: 'bar',
+    data: { labels: [], datasets: [{ backgroundColor: '#e14eca', data: [] }] },
+    options: commonOptions
+});
 
-// --- LÓGICA EN VIVO ---
-function updateLive() {
-    fetch(dbUrl + "sensores.json?auth=" + apiKey)
-    .then(r => r.json())
-    .then(d => {
-        if(!d) return;
-        
-        // 1. Convertir Timestamp UTC a Hora Local automáticamente
-        const ts = Number(d.last_update); 
-        const date = new Date(ts); // El navegador detecta que es UTC y lo pasa a local
-        const timeStr = date.toLocaleTimeString();
 
-        document.getElementById("co2_val").innerText = parseFloat(d.co2).toFixed(1);
-        document.getElementById("co_val").innerText = parseFloat(d.co).toFixed(1);
+// ---------------- LÓGICA EN VIVO (LOOP) ----------------
+function actualizarDatosEnVivo() {
+    // Usamos nocache para evitar que el navegador guarde datos viejos
+    fetch(dbUrl + "sensores.json?auth=" + apiKey + "&nocache=" + Date.now())
+    .then(res => res.json())
+    .then(data => {
+        if(!data) return;
 
-        // Si el timestamp es nuevo, actualizamos gráfica y estado
-        if(ts !== lastUpdate) {
-            lastUpdate = ts;
-            document.getElementById("status").className = "status-box ok";
-            document.getElementById("status").innerText = "En Línea 🟢";
+        // Recuperar timestamp enviado por el ESP
+        const serverTimestamp = Number(data.last_update);
+        const co2 = data.co2 ? parseFloat(data.co2) : 0;
+        const co = data.co ? parseFloat(data.co) : 0;
+        const mq2 = data.mq2 ? parseFloat(data.mq2) : 0; // Opcional si agregas este sensor
 
-            addData(cCO2, timeStr, d.co2);
-            addData(cCO, timeStr, d.co);
+        // Actualizar textos
+        document.getElementById("co2_val").innerText = co2.toFixed(1) + " ppm";
+        document.getElementById("co_val").innerText = co.toFixed(1) + " ppm";
+        document.getElementById("mq2_val").innerText = mq2.toFixed(1) + " ppm";
+
+        // Si el timestamp cambió, es un dato nuevo
+        if(serverTimestamp !== lastFirebaseUpdate) {
+            lastFirebaseUpdate = serverTimestamp;
+            lastLocalReceipt = Date.now();
+            actualizarEstado(true);
+
+            // Hora para la gráfica en vivo
+            const date = new Date(serverTimestamp);
+            const timeStr = date.toLocaleTimeString();
+
+            addPoint(chartCO2, timeStr, co2);
+            addPoint(chartCO, timeStr, co);
+            addPoint(chartMQ2, timeStr, mq2);
         }
     })
-    .catch(() => {
-        document.getElementById("status").className = "status-box fail";
-        document.getElementById("status").innerText = "Desconectado 🔴";
-    });
+    .catch(err => console.error("Error fetching live data:", err));
 }
 
-function addData(chart, label, data) {
+function addPoint(chart, label, data) {
     chart.data.labels.push(label);
     chart.data.datasets[0].data.push(data);
-    if(chart.data.labels.length > 15) {
+    if (chart.data.labels.length > MAX_LIVE_POINTS) {
         chart.data.labels.shift();
         chart.data.datasets[0].data.shift();
     }
+    chart.update('none'); // Update sin animación pesada
+}
+
+// ---------------- LÓGICA DE HISTORIAL (LA CORRECCIÓN) ----------------
+function mostrarHistorial() {
+    const btn = document.getElementById("btnHistorial");
+    btn.disabled = true; 
+    btn.innerText = "Cargando...";
+
+    // 1. Calcular tiempo de corte (hace X minutos)
+    const minutes = parseInt(document.getElementById('timeSlider').value);
+    // Nota: Como vamos a filtrar en JS, pedimos un exceso de datos para asegurar
+    const cutoffTime = Date.now() - (minutes * 60 * 1000);
+
+    // 2. Petición REST a Firebase
+    // Importante: orderBy="timestamp" requiere indexación en reglas de Firebase
+    const url = `${dbUrl}historial.json?auth=${apiKey}&orderBy="timestamp"&limitToLast=500`;
+
+    fetch(url)
+    .then(res => res.json())
+    .then(data => {
+        if (!data) {
+            alert("No hay datos en el historial.");
+            return;
+        }
+
+        // Convertir objeto {id:{...}, id:{...}} a Array [{...}, {...}]
+        let arr = Object.values(data);
+
+        // 3. FILTRADO REAL (Usando el timestamp del ESP32)
+        arr = arr.filter(item => item.timestamp >= cutoffTime);
+
+        // Ordenar por tiempo (del más viejo al más nuevo)
+        arr.sort((a, b) => a.timestamp - b.timestamp);
+
+        if(arr.length === 0) {
+            alert("No hay datos en el rango de tiempo seleccionado.");
+            return;
+        }
+
+        // 4. Mapear datos para Chart.js
+        const labels = arr.map(item => {
+            const d = new Date(item.timestamp);
+            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second:'2-digit' });
+        });
+
+        const dCO2 = arr.map(item => item.co2);
+        const dCO = arr.map(item => item.co);
+        const dMQ2 = arr.map(item => item.mq2 || 0);
+
+        // 5. Renderizar
+        updateChart(histChartCO2, labels, dCO2);
+        updateChart(histChartCO, labels, dCO);
+        updateChart(histChartMQ2, labels, dMQ2);
+    })
+    .catch(error => {
+        console.error("Error historial:", error);
+        alert("Error cargando historial. Revisa la consola.");
+    })
+    .finally(() => {
+        btn.disabled = false;
+        btn.innerText = "Mostrar Datos";
+    });
+}
+
+function updateChart(chart, labels, data) {
+    chart.data.labels = labels;
+    chart.data.datasets[0].data = data;
     chart.update();
 }
 
-// --- LÓGICA HISTORIAL ---
-function cargarHistorial() {
-    const btn = document.getElementById("btnHist");
-    btn.disabled = true; btn.innerText = "Cargando...";
-
-    const mins = document.getElementById("timeSlider").value;
-    // Calculamos el tiempo de corte (Ahora - X minutos)
-    // Date.now() es UTC. El timestamp de Firebase es UTC. Coinciden perfecto.
-    const cutoff = Date.now() - (mins * 60 * 1000);
-
-    fetch(`${dbUrl}historial.json?auth=${apiKey}&orderBy="timestamp"&limitToLast=300`)
-    .then(r => r.json())
-    .then(d => {
-        if(!d) return alert("Sin datos.");
-        
-        let arr = Object.values(d);
-        // Filtrar por tiempo real
-        arr = arr.filter(x => x.timestamp >= cutoff);
-        arr.sort((a,b) => a.timestamp - b.timestamp);
-
-        if(arr.length === 0) return alert("No hay datos recientes.");
-
-        // Generar etiquetas (El navegador convierte UTC a Hora Local aquí)
-        const labels = arr.map(x => new Date(x.timestamp).toLocaleTimeString());
-        
-        hCO2.data.labels = labels;
-        hCO2.data.datasets[0].data = arr.map(x => x.co2);
-        hCO2.update();
-
-        hCO.data.labels = labels;
-        hCO.data.datasets[0].data = arr.map(x => x.co);
-        hCO.update();
-    })
-    .catch(e => console.error(e))
-    .finally(() => { btn.disabled = false; btn.innerText = "Ver Historial"; });
+// ---------------- UTILIDADES ----------------
+function actualizarEstado(conectado) {
+    const el = document.getElementById("status");
+    if(conectado) {
+        el.className = "status-box ok";
+        el.innerText = "ESP32 Conectado 🟢";
+    } else {
+        el.className = "status-box fail";
+        el.innerText = "ESP32 Desconectado 🔴";
+    }
 }
 
-setInterval(updateLive, 2500); // Actualizar cada 2.5 seg
+// Watchdog: Si no recibimos datos nuevos en 15 seg, marcar desconectado
+setInterval(() => {
+    if(Date.now() - lastLocalReceipt > 15000) actualizarEstado(false);
+}, 2000);
+
+// Loop principal (cada 2 segundos)
+setInterval(actualizarDatosEnVivo, 2000);
+
 </script>
 </body>
 </html>
