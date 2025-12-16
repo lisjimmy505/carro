@@ -152,11 +152,14 @@ const COLOR_OK = '#00d25b';      // Verde
 const COLOR_WARN = '#ffcc00';    // Amarillo
 const COLOR_DANGER = '#fd5d93';  // Rojo
 
-// UMBRALES DE PELIGRO (Ajustar según necesidad)
+// --- UMBRALES DE PELIGRO ACTUALIZADOS ---
 const LIMITES = {
-    co2: { warn: 800, danger: 1200 }, // MQ135
-    co:  { warn: 15,  danger: 50 },   // MQ9
-    mq2: { warn: 60,  danger: 120 }   // MQ2
+    // Si valor < warn -> Verde
+    // Si valor >= warn Y < danger -> Amarillo
+    // Si valor >= danger -> Rojo
+    co2: { warn: 500, danger: 800 }, 
+    co:  { warn: 10,  danger: 50 },  
+    mq2: { warn: 50,  danger: 100 }  
 };
 
 // Función auxiliar para obtener color según valor
@@ -180,20 +183,17 @@ const commonOptions = {
 
 // ---------------- INICIALIZAR GRÁFICAS (Chart.js) ----------------
 
-// Configuración de Dataset con Segmentos para cambio de color en línea
 function crearDatasetVivo(tipoSensor) {
     return {
-        borderColor: '#999', // Color por defecto si falla
+        borderColor: '#999', 
         borderWidth: 3,
         fill: true,
-        backgroundColor: 'rgba(255,255,255,0.02)', // Fondo muy sutil
+        backgroundColor: 'rgba(255,255,255,0.02)', 
         tension: 0.3,
         data: [],
-        // AQUÍ ESTÁ LA MAGIA DEL COLOR DINÁMICO EN LÍNEAS
+        // Segmento dinámico para colores
         segment: {
             borderColor: ctx => {
-                // ctx.p0 es punto inicio, ctx.p1 es punto fin del segmento
-                // Usamos p1 para colorear el tramo según el valor al que llega
                 const val = ctx.p1.parsed.y;
                 return obtenerColor(val, tipoSensor);
             }
@@ -217,7 +217,7 @@ const chartMQ2 = new Chart(document.getElementById('chartMQ2'), {
     options: commonOptions
 });
 
-// Gráficas de Historial (Barras)
+// Gráficas de Historial
 const histChartCO2 = new Chart(document.getElementById('histChartCO2'), {
     type: 'bar',
     data: { labels: [], datasets: [{ backgroundColor: [], data: [] }] },
@@ -236,6 +236,7 @@ const histChartMQ2 = new Chart(document.getElementById('histChartMQ2'), {
 
 // ---------------- LÓGICA EN VIVO ----------------
 function actualizarDatosEnVivo() {
+    // El parametro nocache obliga al navegador a pedir datos frescos siempre
     fetch(dbUrl + "sensores.json?auth=" + apiKey + "&nocache=" + Date.now())
     .then(res => res.json())
     .then(data => {
@@ -251,6 +252,7 @@ function actualizarDatosEnVivo() {
         actualizarTextoValor("co_val", co, 'co');
         actualizarTextoValor("mq2_val", mq2, 'mq2');
 
+        // Solo actualizamos la gráfica si el dato es nuevo
         if(serverTimestamp !== lastFirebaseUpdate) {
             lastFirebaseUpdate = serverTimestamp;
             lastLocalReceipt = Date.now();
@@ -316,12 +318,10 @@ function mostrarHistorial() {
             return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second:'2-digit' });
         });
 
-        // Extraer datos
         const dCO2 = arr.map(item => item.co2);
         const dCO = arr.map(item => item.co);
         const dMQ2 = arr.map(item => item.mq2 || 0);
 
-        // Actualizar gráficas con colores dinámicos (Arrays de colores)
         updateHistChart(histChartCO2, labels, dCO2, 'co2');
         updateHistChart(histChartCO, labels, dCO, 'co');
         updateHistChart(histChartMQ2, labels, dMQ2, 'mq2');
@@ -337,12 +337,10 @@ function mostrarHistorial() {
 }
 
 function updateHistChart(chart, labels, data, tipo) {
-    // Generar array de colores basado en los valores de data
     const bgColors = data.map(val => obtenerColor(val, tipo));
-
     chart.data.labels = labels;
     chart.data.datasets[0].data = data;
-    chart.data.datasets[0].backgroundColor = bgColors; // Aplicar colores
+    chart.data.datasets[0].backgroundColor = bgColors;
     chart.update();
 }
 
@@ -357,13 +355,14 @@ function actualizarEstado(conectado) {
     }
 }
 
-// Watchdog
+// Watchdog: Si no hay datos nuevos en 6 seg, marcar desconectado
 setInterval(() => {
     if(Date.now() - lastLocalReceipt > 6000) actualizarEstado(false);
 }, 2000);
 
-// Loop principal
-setInterval(actualizarDatosEnVivo, 2000);
+// --- BUCLE PRINCIPAL DE LECTURA ---
+// Se cambió de 2000ms a 500ms para que la respuesta sea casi inmediata
+setInterval(actualizarDatosEnVivo, 500);
 
 </script>
 </body>
