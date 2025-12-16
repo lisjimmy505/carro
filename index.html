@@ -55,10 +55,10 @@ h3 { margin-top: 0; color: #9a9a9a; font-size: 1.2rem; }
     text-shadow: 0 2px 4px rgba(0,0,0,0.5);
 }
 
-/* Colores */
-.text-co2 { color: #00d25b; } /* Verde */
-.text-co { color: #ff8d72; }  /* Naranja */
-.text-mq2 { color: #e14eca; } /* Rosa */
+/* Colores de Texto Base */
+.text-co2 { color: #00d25b; } 
+.text-co { color: #ff8d72; }  
+.text-mq2 { color: #e14eca; } 
 
 canvas {
     width: 100% !important;
@@ -142,17 +142,36 @@ button:hover:not(:disabled) { background: #0b6ecc; }
 const dbUrl = "https://carro-f8554-default-rtdb.firebaseio.com/";
 const apiKey = "AIzaSyDPf9ZKkIa66_Uw4hxE0KnZ9vWcxVlocvCo"; 
 
-// ---------------- VARIABLES GLOBALES ----------------
+// ---------------- VARIABLES Y COLORES ----------------
 let lastFirebaseUpdate = 0; 
 let lastLocalReceipt = Date.now(); 
-const MAX_LIVE_POINTS = 20; // Aumentado ligeramente para ver más historial inmediato
+const MAX_LIVE_POINTS = 30; 
 
-// CAMBIO: Desactivar animación para respuesta instantánea
+// Paleta de Colores Semáforo
+const COLOR_OK = '#00d25b';      // Verde
+const COLOR_WARN = '#ffcc00';    // Amarillo
+const COLOR_DANGER = '#fd5d93';  // Rojo
+
+// UMBRALES DE PELIGRO (Ajustar según necesidad)
+const LIMITES = {
+    co2: { warn: 800, danger: 1200 }, // MQ135
+    co:  { warn: 15,  danger: 50 },   // MQ9
+    mq2: { warn: 60,  danger: 120 }   // MQ2
+};
+
+// Función auxiliar para obtener color según valor
+function obtenerColor(valor, tipo) {
+    const lim = LIMITES[tipo];
+    if (valor >= lim.danger) return COLOR_DANGER;
+    if (valor >= lim.warn) return COLOR_WARN;
+    return COLOR_OK;
+}
+
 const commonOptions = {
     responsive: true,
     maintainAspectRatio: false,
     plugins: { legend: { display: false } },
-    animation: false, // ¡CLAVE PARA LA VELOCIDAD!
+    animation: false, 
     scales: { 
         x: { grid: { color: '#3d3f53' }, ticks: { color: '#9a9a9a', maxTicksLimit: 6 } },
         y: { beginAtZero: true, grid: { color: '#3d3f53' }, ticks: { color: '#9a9a9a' } } 
@@ -161,45 +180,62 @@ const commonOptions = {
 
 // ---------------- INICIALIZAR GRÁFICAS (Chart.js) ----------------
 
-// 1. Gráficas EN VIVO (Line)
-// tension: 0.1 hace la linea más directa, reduciendo la curva visual
+// Configuración de Dataset con Segmentos para cambio de color en línea
+function crearDatasetVivo(tipoSensor) {
+    return {
+        borderColor: '#999', // Color por defecto si falla
+        borderWidth: 3,
+        fill: true,
+        backgroundColor: 'rgba(255,255,255,0.02)', // Fondo muy sutil
+        tension: 0.3,
+        data: [],
+        // AQUÍ ESTÁ LA MAGIA DEL COLOR DINÁMICO EN LÍNEAS
+        segment: {
+            borderColor: ctx => {
+                // ctx.p0 es punto inicio, ctx.p1 es punto fin del segmento
+                // Usamos p1 para colorear el tramo según el valor al que llega
+                const val = ctx.p1.parsed.y;
+                return obtenerColor(val, tipoSensor);
+            }
+        }
+    };
+}
+
 const chartCO2 = new Chart(document.getElementById('chartCO2'), {
     type: 'line',
-    data: { labels: [], datasets: [{ borderColor: '#00d25b', backgroundColor: 'rgba(0, 210, 91, 0.1)', borderWidth: 3, fill: true, tension: 0.1, data: [] }] },
+    data: { labels: [], datasets: [crearDatasetVivo('co2')] },
     options: commonOptions
 });
 const chartCO = new Chart(document.getElementById('chartCO'), {
     type: 'line',
-    data: { labels: [], datasets: [{ borderColor: '#ff8d72', backgroundColor: 'rgba(255, 141, 114, 0.1)', borderWidth: 3, fill: true, tension: 0.1, data: [] }] },
+    data: { labels: [], datasets: [crearDatasetVivo('co')] },
     options: commonOptions
 });
 const chartMQ2 = new Chart(document.getElementById('chartMQ2'), {
     type: 'line',
-    data: { labels: [], datasets: [{ borderColor: '#e14eca', backgroundColor: 'rgba(225, 78, 202, 0.1)', borderWidth: 3, fill: true, tension: 0.1, data: [] }] },
+    data: { labels: [], datasets: [crearDatasetVivo('mq2')] },
     options: commonOptions
 });
 
-// 2. Gráficas HISTORIAL (Bar)
+// Gráficas de Historial (Barras)
 const histChartCO2 = new Chart(document.getElementById('histChartCO2'), {
     type: 'bar',
-    data: { labels: [], datasets: [{ backgroundColor: '#00d25b', data: [] }] },
+    data: { labels: [], datasets: [{ backgroundColor: [], data: [] }] },
     options: commonOptions
 });
 const histChartCO = new Chart(document.getElementById('histChartCO'), {
     type: 'bar',
-    data: { labels: [], datasets: [{ backgroundColor: '#ff8d72', data: [] }] },
+    data: { labels: [], datasets: [{ backgroundColor: [], data: [] }] },
     options: commonOptions
 });
 const histChartMQ2 = new Chart(document.getElementById('histChartMQ2'), {
     type: 'bar',
-    data: { labels: [], datasets: [{ backgroundColor: '#e14eca', data: [] }] },
+    data: { labels: [], datasets: [{ backgroundColor: [], data: [] }] },
     options: commonOptions
 });
 
-
 // ---------------- LÓGICA EN VIVO ----------------
 function actualizarDatosEnVivo() {
-    // Usamos nocache para evitar caché del navegador
     fetch(dbUrl + "sensores.json?auth=" + apiKey + "&nocache=" + Date.now())
     .then(res => res.json())
     .then(data => {
@@ -210,9 +246,10 @@ function actualizarDatosEnVivo() {
         const co = data.co ? parseFloat(data.co) : 0;
         const mq2 = data.mq2 ? parseFloat(data.mq2) : 0;
 
-        document.getElementById("co2_val").innerText = co2.toFixed(1) + " ppm";
-        document.getElementById("co_val").innerText = co.toFixed(1) + " ppm";
-        document.getElementById("mq2_val").innerText = mq2.toFixed(1) + " ppm";
+        // Actualizar textos y colores de los números grandes
+        actualizarTextoValor("co2_val", co2, 'co2');
+        actualizarTextoValor("co_val", co, 'co');
+        actualizarTextoValor("mq2_val", mq2, 'mq2');
 
         if(serverTimestamp !== lastFirebaseUpdate) {
             lastFirebaseUpdate = serverTimestamp;
@@ -230,6 +267,12 @@ function actualizarDatosEnVivo() {
     .catch(err => console.error("Error live:", err));
 }
 
+function actualizarTextoValor(elementId, valor, tipo) {
+    const el = document.getElementById(elementId);
+    el.innerText = valor.toFixed(1) + " ppm";
+    el.style.color = obtenerColor(valor, tipo);
+}
+
 function addPoint(chart, label, data) {
     chart.data.labels.push(label);
     chart.data.datasets[0].data.push(data);
@@ -237,7 +280,7 @@ function addPoint(chart, label, data) {
         chart.data.labels.shift();
         chart.data.datasets[0].data.shift();
     }
-    chart.update('none'); // Update sin animación
+    chart.update('none'); 
 }
 
 // ---------------- LÓGICA DE HISTORIAL ----------------
@@ -273,13 +316,15 @@ function mostrarHistorial() {
             return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second:'2-digit' });
         });
 
+        // Extraer datos
         const dCO2 = arr.map(item => item.co2);
         const dCO = arr.map(item => item.co);
         const dMQ2 = arr.map(item => item.mq2 || 0);
 
-        updateChart(histChartCO2, labels, dCO2);
-        updateChart(histChartCO, labels, dCO);
-        updateChart(histChartMQ2, labels, dMQ2);
+        // Actualizar gráficas con colores dinámicos (Arrays de colores)
+        updateHistChart(histChartCO2, labels, dCO2, 'co2');
+        updateHistChart(histChartCO, labels, dCO, 'co');
+        updateHistChart(histChartMQ2, labels, dMQ2, 'mq2');
     })
     .catch(error => {
         console.error("Error historial:", error);
@@ -291,9 +336,13 @@ function mostrarHistorial() {
     });
 }
 
-function updateChart(chart, labels, data) {
+function updateHistChart(chart, labels, data, tipo) {
+    // Generar array de colores basado en los valores de data
+    const bgColors = data.map(val => obtenerColor(val, tipo));
+
     chart.data.labels = labels;
     chart.data.datasets[0].data = data;
+    chart.data.datasets[0].backgroundColor = bgColors; // Aplicar colores
     chart.update();
 }
 
@@ -308,12 +357,12 @@ function actualizarEstado(conectado) {
     }
 }
 
-// Watchdog: Si no hay datos en 6 seg, marcar desconectado
+// Watchdog
 setInterval(() => {
     if(Date.now() - lastLocalReceipt > 6000) actualizarEstado(false);
 }, 2000);
 
-// Loop principal (cada 2 segundos)
+// Loop principal
 setInterval(actualizarDatosEnVivo, 2000);
 
 </script>
