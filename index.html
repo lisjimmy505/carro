@@ -1,369 +1,60 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<title>Monitor Calidad del Aire IoT</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+import { Zap, Activity, Users } from "lucide-react";
+import PedestrianChart from "@/components/PedestrianChart";
+import EnergyChart from "@/components/EnergyChart";
+import EnergyCounter from "@/components/EnergyCounter";
 
-<style>
-/* --- ESTILOS VISUALES --- */
-body {
-    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-    background: #1e1e2f;
-    color: #e0e0e0;
-    text-align: center;
-    margin: 0; padding: 20px;
-}
-h1 { margin-bottom: 10px; font-weight: 300; letter-spacing: 1px; }
-h2 { margin-top: 40px; border-top: 1px solid #3d3f53; padding-top: 20px; color: #ffffff; }
+const Index = () => {
+  return (
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <header className="border-b border-border bg-card">
+        <div className="max-w-6xl mx-auto px-6 py-5 flex items-center gap-4">
+          <div className="w-11 h-11 rounded-xl bg-primary flex items-center justify-center">
+            <Zap className="w-6 h-6 text-primary-foreground" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-foreground tracking-tight">
+              Baldosa Generadora de Energía
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              Monitoreo en tiempo real
+            </p>
+          </div>
+        </div>
+      </header>
 
-/* Indicador de Estado */
-.status-box { 
-    display: inline-block; 
-    padding: 8px 25px; 
-    border-radius: 20px; 
-    font-size: 16px; 
-    font-weight: bold;
-    margin-bottom: 30px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-}
-.ok { background: rgba(0, 210, 91, 0.2); color: #00d25b; border: 1px solid #00d25b; }
-.fail { background: rgba(253, 93, 147, 0.2); color: #fd5d93; border: 1px solid #fd5d93; }
+      <main className="max-w-6xl mx-auto px-6 py-8 space-y-6">
+        {/* Stats row */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {[
+            { icon: Users, label: "Peatones hoy", value: "1,264", sub: "+12% vs ayer" },
+            { icon: Activity, label: "Energía total", value: "91.2 Wh", sub: "Acumulado del día" },
+            { icon: Zap, label: "Pico máximo", value: "11.2 Wh", sub: "a las 18:00" },
+          ].map((stat) => (
+            <div key={stat.label} className="rounded-xl bg-card border border-border p-5 flex items-center gap-4">
+              <div className="w-10 h-10 rounded-lg bg-secondary flex items-center justify-center">
+                <stat.icon className="w-5 h-5 text-muted-foreground" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wider">{stat.label}</p>
+                <p className="text-2xl font-bold text-foreground font-mono-display">{stat.value}</p>
+                <p className="text-xs text-muted-foreground">{stat.sub}</p>
+              </div>
+            </div>
+          ))}
+        </div>
 
-/* Contenedores de Gráficas */
-.charts-row {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 30px;
-    margin-top: 20px;
-}
-.chart-card {
-    background: #27293d;
-    padding: 25px;
-    border-radius: 15px;
-    width: 30%; 
-    min-width: 300px;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-    border: 1px solid #3d3f53;
-}
-h3 { margin-top: 0; color: #9a9a9a; font-size: 1.2rem; }
-.value-display {
-    font-size: 36px; 
-    font-weight: bold;
-    margin: 15px 0;
-    text-shadow: 0 2px 4px rgba(0,0,0,0.5);
-}
+        {/* Charts */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <PedestrianChart />
+          <EnergyChart />
+        </div>
 
-/* Colores de Texto Base */
-.text-co2 { color: #00d25b; } 
-.text-co { color: #ff8d72; }  
-.text-mq2 { color: #e14eca; } 
-
-canvas {
-    width: 100% !important;
-    height: 250px !important;
-    margin-top: 10px;
-}
-
-/* Controles del Historial */
-.history-controls {
-    background: #27293d;
-    padding: 20px;
-    margin: 20px auto;
-    width: fit-content;
-    border-radius: 10px;
-    border: 1px solid #3d3f53;
-}
-button {
-    background: #1d8cf8;
-    color: white;
-    border: none;
-    padding: 8px 16px;
-    border-radius: 5px;
-    cursor: pointer;
-    font-size: 16px;
-    margin-left: 15px;
-    transition: 0.2s;
-}
-button:disabled { background: #555; cursor: not-allowed; }
-button:hover:not(:disabled) { background: #0b6ecc; }
-</style>
-</head>
-
-<body>
-
-<h1>Monitor de Gases en Tiempo Real</h1>
-<div id="status" class="status-box fail">Esperando conexión...</div>
-
-<div class="charts-row">
-    <div class="chart-card">
-        <h3>MQ135 (CO₂)</h3>
-        <div id="co2_val" class="value-display text-co2">--- ppm</div>
-        <canvas id="chartCO2"></canvas>
+        {/* Real-time counter */}
+        <EnergyCounter />
+      </main>
     </div>
-    <div class="chart-card">
-        <h3>MQ9 (CO)</h3>
-        <div id="co_val" class="value-display text-co">--- ppm</div>
-        <canvas id="chartCO"></canvas>
-    </div>
-    <div class="chart-card">
-        <h3>MQ2 (Gas/Humo)</h3>
-        <div id="mq2_val" class="value-display text-mq2">--- ppm</div>
-        <canvas id="chartMQ2"></canvas>
-    </div>
-</div>
-
-<h2>Historial (Datos Reales desde Firebase)</h2>
-<div class="history-controls">
-    <label for="timeSlider">Tiempo a visualizar: <span id="timeVal" style="color:#1d8cf8; font-weight:bold;">10</span> min</label>
-    <br><br>
-    <input type="range" id="timeSlider" min="1" max="60" value="10" oninput="document.getElementById('timeVal').innerText = this.value">
-    <button id="btnHistorial" onclick="mostrarHistorial()">Mostrar Datos</button>
-</div>
-
-<div class="charts-row">
-    <div class="chart-card">
-        <h3>Historial CO₂</h3>
-        <canvas id="histChartCO2"></canvas>
-    </div>
-    <div class="chart-card">
-        <h3>Historial CO</h3>
-        <canvas id="histChartCO"></canvas>
-    </div>
-    <div class="chart-card">
-        <h3>Historial MQ2</h3>
-        <canvas id="histChartMQ2"></canvas>
-    </div>
-</div>
-
-<script>
-// ---------------- CONFIGURACIÓN FIREBASE ----------------
-const dbUrl = "https://carro-f8554-default-rtdb.firebaseio.com/";
-const apiKey = "AIzaSyDPf9ZKkIa66_Uw4hxE0KnZ9vWcxVlocvCo"; 
-
-// ---------------- VARIABLES Y COLORES ----------------
-let lastFirebaseUpdate = 0; 
-let lastLocalReceipt = Date.now(); 
-const MAX_LIVE_POINTS = 30; 
-
-// Paleta de Colores Semáforo
-const COLOR_OK = '#00d25b';      // Verde
-const COLOR_WARN = '#ffcc00';    // Amarillo
-const COLOR_DANGER = '#fd5d93';  // Rojo
-
-// --- UMBRALES DE PELIGRO ACTUALIZADOS ---
-const LIMITES = {
-    // Si valor < warn -> Verde
-    // Si valor >= warn Y < danger -> Amarillo
-    // Si valor >= danger -> Rojo
-    co2: { warn: 500, danger: 800 }, 
-    co:  { warn: 10,  danger: 50 },  
-    mq2: { warn: 50,  danger: 100 }  
+  );
 };
 
-// Función auxiliar para obtener color según valor
-function obtenerColor(valor, tipo) {
-    const lim = LIMITES[tipo];
-    if (valor >= lim.danger) return COLOR_DANGER;
-    if (valor >= lim.warn) return COLOR_WARN;
-    return COLOR_OK;
-}
-
-const commonOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: { legend: { display: false } },
-    animation: false, 
-    scales: { 
-        x: { grid: { color: '#3d3f53' }, ticks: { color: '#9a9a9a', maxTicksLimit: 6 } },
-        y: { beginAtZero: true, grid: { color: '#3d3f53' }, ticks: { color: '#9a9a9a' } } 
-    }
-};
-
-// ---------------- INICIALIZAR GRÁFICAS (Chart.js) ----------------
-
-function crearDatasetVivo(tipoSensor) {
-    return {
-        borderColor: '#999', 
-        borderWidth: 3,
-        fill: true,
-        backgroundColor: 'rgba(255,255,255,0.02)', 
-        tension: 0.3,
-        data: [],
-        // Segmento dinámico para colores
-        segment: {
-            borderColor: ctx => {
-                const val = ctx.p1.parsed.y;
-                return obtenerColor(val, tipoSensor);
-            }
-        }
-    };
-}
-
-const chartCO2 = new Chart(document.getElementById('chartCO2'), {
-    type: 'line',
-    data: { labels: [], datasets: [crearDatasetVivo('co2')] },
-    options: commonOptions
-});
-const chartCO = new Chart(document.getElementById('chartCO'), {
-    type: 'line',
-    data: { labels: [], datasets: [crearDatasetVivo('co')] },
-    options: commonOptions
-});
-const chartMQ2 = new Chart(document.getElementById('chartMQ2'), {
-    type: 'line',
-    data: { labels: [], datasets: [crearDatasetVivo('mq2')] },
-    options: commonOptions
-});
-
-// Gráficas de Historial
-const histChartCO2 = new Chart(document.getElementById('histChartCO2'), {
-    type: 'bar',
-    data: { labels: [], datasets: [{ backgroundColor: [], data: [] }] },
-    options: commonOptions
-});
-const histChartCO = new Chart(document.getElementById('histChartCO'), {
-    type: 'bar',
-    data: { labels: [], datasets: [{ backgroundColor: [], data: [] }] },
-    options: commonOptions
-});
-const histChartMQ2 = new Chart(document.getElementById('histChartMQ2'), {
-    type: 'bar',
-    data: { labels: [], datasets: [{ backgroundColor: [], data: [] }] },
-    options: commonOptions
-});
-
-// ---------------- LÓGICA EN VIVO ----------------
-function actualizarDatosEnVivo() {
-    // El parametro nocache obliga al navegador a pedir datos frescos siempre
-    fetch(dbUrl + "sensores.json?auth=" + apiKey + "&nocache=" + Date.now())
-    .then(res => res.json())
-    .then(data => {
-        if(!data) return;
-
-        const serverTimestamp = Number(data.last_update);
-        const co2 = data.co2 ? parseFloat(data.co2) : 0;
-        const co = data.co ? parseFloat(data.co) : 0;
-        const mq2 = data.mq2 ? parseFloat(data.mq2) : 0;
-
-        // Actualizar textos y colores de los números grandes
-        actualizarTextoValor("co2_val", co2, 'co2');
-        actualizarTextoValor("co_val", co, 'co');
-        actualizarTextoValor("mq2_val", mq2, 'mq2');
-
-        // Solo actualizamos la gráfica si el dato es nuevo
-        if(serverTimestamp !== lastFirebaseUpdate) {
-            lastFirebaseUpdate = serverTimestamp;
-            lastLocalReceipt = Date.now();
-            actualizarEstado(true);
-
-            const date = new Date(serverTimestamp);
-            const timeStr = date.toLocaleTimeString();
-
-            addPoint(chartCO2, timeStr, co2);
-            addPoint(chartCO, timeStr, co);
-            addPoint(chartMQ2, timeStr, mq2);
-        }
-    })
-    .catch(err => console.error("Error live:", err));
-}
-
-function actualizarTextoValor(elementId, valor, tipo) {
-    const el = document.getElementById(elementId);
-    el.innerText = valor.toFixed(1) + " ppm";
-    el.style.color = obtenerColor(valor, tipo);
-}
-
-function addPoint(chart, label, data) {
-    chart.data.labels.push(label);
-    chart.data.datasets[0].data.push(data);
-    if (chart.data.labels.length > MAX_LIVE_POINTS) {
-        chart.data.labels.shift();
-        chart.data.datasets[0].data.shift();
-    }
-    chart.update('none'); 
-}
-
-// ---------------- LÓGICA DE HISTORIAL ----------------
-function mostrarHistorial() {
-    const btn = document.getElementById("btnHistorial");
-    btn.disabled = true; 
-    btn.innerText = "Cargando...";
-
-    const minutes = parseInt(document.getElementById('timeSlider').value);
-    const cutoffTime = Date.now() - (minutes * 60 * 1000);
-
-    const url = `${dbUrl}historial.json?auth=${apiKey}&orderBy="timestamp"&limitToLast=500`;
-
-    fetch(url)
-    .then(res => res.json())
-    .then(data => {
-        if (!data) {
-            alert("No hay datos en el historial.");
-            return;
-        }
-
-        let arr = Object.values(data);
-        arr = arr.filter(item => item.timestamp >= cutoffTime);
-        arr.sort((a, b) => a.timestamp - b.timestamp);
-
-        if(arr.length === 0) {
-            alert("No hay datos recientes en el rango seleccionado.");
-            return;
-        }
-
-        const labels = arr.map(item => {
-            const d = new Date(item.timestamp);
-            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second:'2-digit' });
-        });
-
-        const dCO2 = arr.map(item => item.co2);
-        const dCO = arr.map(item => item.co);
-        const dMQ2 = arr.map(item => item.mq2 || 0);
-
-        updateHistChart(histChartCO2, labels, dCO2, 'co2');
-        updateHistChart(histChartCO, labels, dCO, 'co');
-        updateHistChart(histChartMQ2, labels, dMQ2, 'mq2');
-    })
-    .catch(error => {
-        console.error("Error historial:", error);
-        alert("Error cargando historial.");
-    })
-    .finally(() => {
-        btn.disabled = false;
-        btn.innerText = "Mostrar Datos";
-    });
-}
-
-function updateHistChart(chart, labels, data, tipo) {
-    const bgColors = data.map(val => obtenerColor(val, tipo));
-    chart.data.labels = labels;
-    chart.data.datasets[0].data = data;
-    chart.data.datasets[0].backgroundColor = bgColors;
-    chart.update();
-}
-
-function actualizarEstado(conectado) {
-    const el = document.getElementById("status");
-    if(conectado) {
-        el.className = "status-box ok";
-        el.innerText = "ESP32 Conectado 🟢";
-    } else {
-        el.className = "status-box fail";
-        el.innerText = "ESP32 Desconectado 🔴";
-    }
-}
-
-// Watchdog: Si no hay datos nuevos en 6 seg, marcar desconectado
-setInterval(() => {
-    if(Date.now() - lastLocalReceipt > 6000) actualizarEstado(false);
-}, 2000);
-
-// --- BUCLE PRINCIPAL DE LECTURA ---
-// Se cambió de 2000ms a 500ms para que la respuesta sea casi inmediata
-setInterval(actualizarDatosEnVivo, 500);
-
-</script>
-</body>
-</html>
+export default Index;
