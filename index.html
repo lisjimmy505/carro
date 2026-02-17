@@ -1,60 +1,164 @@
-import { Zap, Activity, Users } from "lucide-react";
-import PedestrianChart from "@/components/PedestrianChart";
-import EnergyChart from "@/components/EnergyChart";
-import EnergyCounter from "@/components/EnergyCounter";
-
-const Index = () => {
-  return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b border-border bg-card">
-        <div className="max-w-6xl mx-auto px-6 py-5 flex items-center gap-4">
-          <div className="w-11 h-11 rounded-xl bg-primary flex items-center justify-center">
-            <Zap className="w-6 h-6 text-primary-foreground" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold text-foreground tracking-tight">
-              Baldosa Generadora de Energía
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              Monitoreo en tiempo real
-            </p>
-          </div>
-        </div>
-      </header>
-
-      <main className="max-w-6xl mx-auto px-6 py-8 space-y-6">
-        {/* Stats row */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {[
-            { icon: Users, label: "Peatones hoy", value: "1,264", sub: "+12% vs ayer" },
-            { icon: Activity, label: "Energía total", value: "91.2 Wh", sub: "Acumulado del día" },
-            { icon: Zap, label: "Pico máximo", value: "11.2 Wh", sub: "a las 18:00" },
-          ].map((stat) => (
-            <div key={stat.label} className="rounded-xl bg-card border border-border p-5 flex items-center gap-4">
-              <div className="w-10 h-10 rounded-lg bg-secondary flex items-center justify-center">
-                <stat.icon className="w-5 h-5 text-muted-foreground" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground uppercase tracking-wider">{stat.label}</p>
-                <p className="text-2xl font-bold text-foreground font-mono-display">{stat.value}</p>
-                <p className="text-xs text-muted-foreground">{stat.sub}</p>
-              </div>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Baldosa Generadora de Energía</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-6xl">
+        <header class="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+                <h1 class="text-3xl font-bold text-slate-900 tracking-tight">Monitor de Energía</h1>
+                <p class="text-sm text-slate-500 mt-1">Sistema Piezoeléctrico y Electromagnético</p>
             </div>
-          ))}
+            <div class="flex items-center gap-2 text-emerald-700 bg-emerald-100 px-4 py-2 rounded-full font-medium text-sm shadow-sm border border-emerald-200">
+                <span class="relative flex h-3 w-3">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                </span>
+                Módulo en línea
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div class="bg-white rounded-2xl shadow-sm p-6 border border-slate-100 border-l-4 border-l-blue-500 transition-transform hover:-translate-y-1">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Voltaje</p>
+                        <h3 class="text-2xl font-bold text-slate-800" id="val-voltage">0.00 V</h3>
+                    </div>
+                    <div class="bg-blue-50 p-3 rounded-xl">
+                        <i class="fas fa-bolt text-xl text-blue-500"></i>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-2xl shadow-sm p-6 border border-slate-100 border-l-4 border-l-amber-500 transition-transform hover:-translate-y-1">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Corriente</p>
+                        <h3 class="text-2xl font-bold text-slate-800" id="val-current">0.00 mA</h3>
+                    </div>
+                    <div class="bg-amber-50 p-3 rounded-xl">
+                        <i class="fas fa-water text-xl text-amber-500"></i>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-2xl shadow-sm p-6 border border-slate-100 border-l-4 border-l-rose-500 transition-transform hover:-translate-y-1">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Potencia Instantánea</p>
+                        <h3 class="text-2xl font-bold text-slate-800" id="val-power">0.00 mW</h3>
+                    </div>
+                    <div class="bg-rose-50 p-3 rounded-xl">
+                        <i class="fas fa-fire text-xl text-rose-500"></i>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-2xl shadow-sm p-6 border border-slate-100 border-l-4 border-l-emerald-500 transition-transform hover:-translate-y-1">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Impactos / Pasos</p>
+                        <h3 class="text-2xl font-bold text-slate-800" id="val-steps">0</h3>
+                    </div>
+                    <div class="bg-emerald-50 p-3 rounded-xl">
+                        <i class="fas fa-shoe-prints text-xl text-emerald-500"></i>
+                    </div>
+                </div>
+            </div>
         </div>
 
-        {/* Charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <PedestrianChart />
-          <EnergyChart />
+        <div class="bg-white rounded-2xl shadow-sm p-6 border border-slate-100">
+            <h2 class="text-lg font-bold text-slate-800 mb-6">Generación de Potencia en el Tiempo</h2>
+            <div class="relative h-80 w-full">
+                <canvas id="energyChart"></canvas>
+            </div>
         </div>
-
-        {/* Real-time counter */}
-        <EnergyCounter />
-      </main>
     </div>
-  );
-};
 
-export default Index;
+    <script>
+        // Inicialización del Gráfico de Chart.js
+        const ctx = document.getElementById('energyChart').getContext('2d');
+        const energyChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: ['-9s', '-8s', '-7s', '-6s', '-5s', '-4s', '-3s', '-2s', '-1s', 'Ahora'],
+                datasets: [{
+                    label: 'Potencia Generada (mW)',
+                    data: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                    borderColor: '#f43f5e', // Color rose-500 de Tailwind
+                    backgroundColor: 'rgba(244, 63, 94, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.4, // Curvatura suave de la línea
+                    pointBackgroundColor: '#f43f5e',
+                    pointRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    y: { 
+                        beginAtZero: true, 
+                        suggestedMax: 100,
+                        grid: { borderDash: [5, 5], color: '#f1f5f9' }
+                    },
+                    x: {
+                        grid: { display: false }
+                    }
+                }
+            }
+        });
+
+        // Simulación de datos (Esto se reemplazará por la conexión web real)
+        let totalSteps = 0;
+        
+        function fetchSensorData() {
+            // Lógica de simulación para emular el comportamiento del sistema
+            // Se asume un pico de energía al dar el paso y una caída residual por el volante de inercia
+            const isStep = Math.random() > 0.8; 
+            
+            let voltage = 0;
+            let current = 0;
+            
+            if (isStep) {
+                voltage = (Math.random() * 3 + 2).toFixed(2); // Pico entre 2V y 5V
+                current = (Math.random() * 15 + 5).toFixed(2); // Pico entre 5mA y 20mA
+                totalSteps++;
+            } else {
+                // Inercia remanente
+                voltage = (Math.random() * 0.8).toFixed(2);
+                current = (Math.random() * 3).toFixed(2);
+            }
+
+            // Cálculo matemático $P = V \times I$
+            const power = (voltage * current).toFixed(2); 
+
+            // Actualización del DOM (Interfaz)
+            document.getElementById('val-voltage').innerText = voltage + ' V';
+            document.getElementById('val-current').innerText = current + ' mA';
+            document.getElementById('val-power').innerText = power + ' mW';
+            document.getElementById('val-steps').innerText = totalSteps;
+
+            // Actualización de la gráfica
+            const dataArray = energyChart.data.datasets[0].data;
+            dataArray.push(parseFloat(power)); // Añadir el nuevo dato al final
+            dataArray.shift(); // Eliminar el dato más antiguo
+            energyChart.update();
+        }
+
+        // Ejecutar la lectura de datos cada segundo
+        setInterval(fetchSensorData, 1000);
+    </script>
+</body>
+</html>
