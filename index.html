@@ -80,6 +80,13 @@
                 <canvas id="energyChart"></canvas>
             </div>
         </div>
+
+        <div class="mt-6 flex justify-center">
+            <button id="btn-show-totals" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-6 rounded-xl shadow-md transition-all flex items-center gap-2">
+                <i class="fas fa-clipboard-list"></i>
+                Mostrar Datos Totales
+            </button>
+        </div>
     </div>
 
     <script>
@@ -122,6 +129,7 @@
 
         // Simulación de datos (Esto se reemplazará por la conexión web real)
         let totalSteps = 0;
+        let totalEnergy = 0; // NUEVO: Variable para almacenar la energía total acumulada
         
         function fetchSensorData() {
             // Lógica de simulación para emular el comportamiento del sistema
@@ -144,6 +152,9 @@
             // Cálculo matemático $P = V \times I$
             const power = (voltage * current).toFixed(2); 
 
+            // NUEVO: Acumular la potencia en la energía total (calculado como mWs debido al intervalo de 1s)
+            totalEnergy += parseFloat(power);
+
             // Actualización del DOM (Interfaz)
             document.getElementById('val-voltage').innerText = voltage + ' V';
             document.getElementById('val-current').innerText = current + ' mA';
@@ -159,6 +170,11 @@
 
         // Ejecutar la lectura de datos cada segundo
         setInterval(fetchSensorData, 1000);
+
+        // NUEVO: Funcionalidad del botón para mostrar el total de datos obtenidos
+        document.getElementById('btn-show-totals').addEventListener('click', () => {
+            alert(`📊 RESUMEN DE DATOS OBTENIDOS\n\n👟 Número de pisadas registradas: ${totalSteps}\n⚡ Total de energía generada: ${totalEnergy.toFixed(2)} mWs`);
+        });
     </script>
 </body>
 </html>
